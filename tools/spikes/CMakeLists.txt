@@ -33,7 +33,7 @@ target_compile_definitions(spike_common INTERFACE
   NITID_DLSS_LIB_DIR="${NITID_DLSS_SDK}/lib/Linux_x86_64/rel")
 
 # Each spike adds itself when its directory has a CMakeLists.txt.
-file(GLOB spike_dirs LIST_DIRECTORIES true "${CMAKE_CURRENT_SOURCE_DIR}/s*-*")
+file(GLOB spike_dirs LIST_DIRECTORIES true "${CMAKE_CURRENT_SOURCE_DIR}/s*-*" "${CMAKE_CURRENT_SOURCE_DIR}/f*-*")
 foreach(d IN LISTS spike_dirs)
   if(EXISTS "${d}/CMakeLists.txt")
     add_subdirectory("${d}")

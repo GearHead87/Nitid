@@ -33,7 +33,7 @@ the plan work on the target Linux setup?** The full plan is in [TESTPLAN.md](TES
 | H1 | HDR10 swapchain offered and shown correctly? | ⏭️ | 620.73.04 | – | – | [h1-hdr-swapchain](h1-hdr-swapchain/NOTES.md): skipped for now (HDR postponed) |
 | S7 | Frame timing within ±0.5 ms with present timing? | – | 620.73.04 | – | – | |
 | S8 | Capture card frames into Vulkan (direct or upload)? | ⏭️ | 620.73.04 | – | – | [s8-v4l2-import](s8-v4l2-import/NOTES.md): skipped, no capture card |
-| F1 | Optical flow + DLSS-G on a real clip looks good vs VFX frame gen? | – | 620.73.04 | – | – | |
+| F1 | Optical flow + DLSS-G on a real clip looks good vs VFX frame gen? | ⚠️ | 620.73.04 | – | 2026-11-23 | [f1-flow-dlssg](f1-flow-dlssg/NOTES.md): pipeline works; estimated MVs don't beat zero-MV DLSS-G (block artifacts); VFX VFG best; lite+NVOF = cheap high-multiplier option. MV convention: pixels, mvecScale=1 |
 
 Result values: ✅ pass · ❌ fail · ⚠️ partial · ⏳ waiting for the user's report · ⏭️ skipped · – not run yet.
 

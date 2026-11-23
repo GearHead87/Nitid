@@ -20,7 +20,10 @@ struct NgxSession {
     NVSDK_NGX_Parameter* params = nullptr;
 
     // features: which NGX features to collect Vulkan extension requirements for.
-    void init(const std::vector<NVSDK_NGX_Feature>& features, const std::string& results_dir, bool verbose = false)
+    // extra_dev_exts / features_chain / extra_queue: e.g. VK_NV_optical_flow + its feature + OF queue.
+    void init(const std::vector<NVSDK_NGX_Feature>& features, const std::string& results_dir, bool verbose = false,
+              std::vector<std::string> extra_dev_exts = {}, const void* features_chain = nullptr,
+              VkQueueFlags extra_queue = 0)
     {
         dirs = {NITID_DLSS_LIB_DIR};
         finfo = std::make_unique<NgxFeatureInfo>(dirs, verbose);
@@ -44,7 +47,8 @@ struct NgxSession {
             if (NVSDK_NGX_SUCCEED(NVSDK_NGX_VULKAN_GetFeatureDeviceExtensionRequirements(vk.instance, vk.phys, &d, &n, &p)))
                 for (uint32_t k = 0; k < n; ++k) dev.emplace_back(p[k].extensionName);
         }
-        vk.create_device(dev);
+        dev.insert(dev.end(), extra_dev_exts.begin(), extra_dev_exts.end());
+        vk.create_device(dev, features_chain, extra_queue);
         auto r = NVSDK_NGX_VULKAN_Init_with_ProjectID(kNgxProjectId, NVSDK_NGX_ENGINE_TYPE_CUSTOM, kNgxEngineVersion,
                                                       data_path.c_str(), vk.instance, vk.phys, vk.device,
                                                       vkGetInstanceProcAddr, vkGetDeviceProcAddr, &finfo->info);
