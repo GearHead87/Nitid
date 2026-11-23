@@ -89,7 +89,8 @@ struct VkCtx {
 
     // Creates the device with every supported core 1.1/1.2/1.3 feature enabled (fine for spikes)
     // plus the requested extensions, and one graphics+compute queue.
-    void create_device(std::vector<std::string> exts, const void* extra_features_chain = nullptr)
+    void create_device(std::vector<std::string> exts, const void* extra_features_chain = nullptr,
+                       VkQueueFlags extra_queue = 0)
     {
         uint32_t n = 0;
         vkEnumerateDeviceExtensionProperties(phys, nullptr, &n, nullptr);
@@ -128,15 +129,32 @@ struct VkCtx {
         f2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, &v11};
         vkGetPhysicalDeviceFeatures2(phys, &f2);
 
+        // Optional second queue from another family that has `extra_queue` flags
+        // (e.g. VK_QUEUE_OPTICAL_FLOW_BIT_NV).
+        queue2_family = UINT32_MAX;
+        if (extra_queue)
+            for (uint32_t i = 0; i < n; ++i)
+                if (i != queue_family && (qf[i].queueFlags & extra_queue) == extra_queue) {
+                    queue2_family = i;
+                    break;
+                }
+        if (extra_queue && queue2_family == UINT32_MAX) {
+            std::fprintf(stderr, "no queue family with flags 0x%x\n", extra_queue);
+            std::exit(1);
+        }
+
         float prio = 1.0f;
-        VkDeviceQueueCreateInfo qci{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
-        qci.queueFamilyIndex = queue_family;
-        qci.queueCount = 1;
-        qci.pQueuePriorities = &prio;
+        VkDeviceQueueCreateInfo qci[2]{};
+        qci[0] = {VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
+        qci[0].queueFamilyIndex = queue_family;
+        qci[0].queueCount = 1;
+        qci[0].pQueuePriorities = &prio;
+        qci[1] = qci[0];
+        qci[1].queueFamilyIndex = queue2_family;
         VkDeviceCreateInfo ci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
         ci.pNext = &f2;
-        ci.queueCreateInfoCount = 1;
-        ci.pQueueCreateInfos = &qci;
+        ci.queueCreateInfoCount = queue2_family == UINT32_MAX ? 1 : 2;
+        ci.pQueueCreateInfos = qci;
         ci.enabledExtensionCount = uint32_t(names.size());
         ci.ppEnabledExtensionNames = names.data();
         VK_CHECK(vkCreateDevice(phys, &ci, nullptr, &device));
@@ -147,6 +165,40 @@ struct VkCtx {
         pci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         pci.queueFamilyIndex = queue_family;
         VK_CHECK(vkCreateCommandPool(device, &pci, nullptr, &pool));
+        if (queue2_family != UINT32_MAX) {
+            vkGetDeviceQueue(device, queue2_family, 0, &queue2);
+            pci.queueFamilyIndex = queue2_family;
+            VK_CHECK(vkCreateCommandPool(device, &pci, nullptr, &pool2));
+        }
+    }
+
+    uint32_t queue2_family = UINT32_MAX;
+    VkQueue queue2 = VK_NULL_HANDLE;
+    VkCommandPool pool2 = VK_NULL_HANDLE;
+
+    VkCommandBuffer begin2()
+    {
+        VkCommandBufferAllocateInfo ai{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+        ai.commandPool = pool2;
+        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        ai.commandBufferCount = 1;
+        VkCommandBuffer cb;
+        VK_CHECK(vkAllocateCommandBuffers(device, &ai, &cb));
+        VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        VK_CHECK(vkBeginCommandBuffer(cb, &bi));
+        return cb;
+    }
+
+    void submit_wait2(VkCommandBuffer cb)
+    {
+        VK_CHECK(vkEndCommandBuffer(cb));
+        VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+        si.commandBufferCount = 1;
+        si.pCommandBuffers = &cb;
+        VK_CHECK(vkQueueSubmit(queue2, 1, &si, VK_NULL_HANDLE));
+        VK_CHECK(vkQueueWaitIdle(queue2));
+        vkFreeCommandBuffers(device, pool2, 1, &cb);
     }
 
     VkCommandBuffer begin()
@@ -194,6 +246,7 @@ struct VkCtx {
     {
         if (device) {
             vkDeviceWaitIdle(device);
+            if (pool2) vkDestroyCommandPool(device, pool2, nullptr);
             vkDestroyCommandPool(device, pool, nullptr);
             vkDestroyDevice(device, nullptr);
         }

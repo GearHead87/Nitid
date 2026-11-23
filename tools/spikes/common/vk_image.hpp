@@ -50,13 +50,17 @@ struct Image {
     VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
 };
 
-inline Image make_image(VkCtx& vk, uint32_t w, uint32_t h, VkFormat fmt, VkImageUsageFlags extra = 0)
+// pnext: extra VkImageCreateInfo chain (e.g. VkOpticalFlowImageFormatInfoNV).
+// concurrent: share the image between the main queue family and queue2's family.
+inline Image make_image(VkCtx& vk, uint32_t w, uint32_t h, VkFormat fmt, VkImageUsageFlags extra = 0,
+                        const void* pnext = nullptr, bool concurrent = false, bool default_usage = true)
 {
     Image im;
     im.fmt = fmt;
     im.w = w;
     im.h = h;
     VkImageCreateInfo ci{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    ci.pNext = pnext;
     ci.imageType = VK_IMAGE_TYPE_2D;
     ci.format = fmt;
     ci.extent = {w, h, 1};
@@ -64,9 +68,15 @@ inline Image make_image(VkCtx& vk, uint32_t w, uint32_t h, VkFormat fmt, VkImage
     ci.arrayLayers = 1;
     ci.samples = VK_SAMPLE_COUNT_1_BIT;
     ci.tiling = VK_IMAGE_TILING_OPTIMAL;
-    ci.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-               VK_IMAGE_USAGE_TRANSFER_DST_BIT | extra;
+    ci.usage = (default_usage ? VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT : 0) |
+               VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | extra;
     ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    uint32_t fams[2] = {vk.queue_family, vk.queue2_family};
+    if (concurrent && vk.queue2_family != UINT32_MAX) {
+        ci.sharingMode = VK_SHARING_MODE_CONCURRENT;
+        ci.queueFamilyIndexCount = 2;
+        ci.pQueueFamilyIndices = fams;
+    }
     VK_CHECK(vkCreateImage(vk.device, &ci, nullptr, &im.img));
     VkMemoryRequirements r;
     vkGetImageMemoryRequirements(vk.device, im.img, &r);
