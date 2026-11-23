@@ -22,7 +22,7 @@ the plan work on the target Linux setup?** The full plan is in [TESTPLAN.md](TES
 | V2 | VFX denoise / deblur visibly better? | ⚠️ | 620.73.04 | – | 2026-11-23 | [v2-vfx-denoise-deblur](v2-vfx-denoise-deblur/NOTES.md): fast (1–5.6 ms at 1080p) but no measurable cleanup; denoise softens blocks slightly, deblur worsens them |
 | V3 | VFX frame generation 2x / 4x works in real time? | ✅ | 620.73.04 | – | 2026-11-23 | [v3-vfx-frame-gen](v3-vfx-frame-gen/NOTES.md): 1440p MEDIUM 1.7 ms/frame; beats blending by 2–4 dB; default shot-change detection misfires on fast motion (turn off) |
 | V4 | VFX TrueHDR output correct in HDR? | ⚠️ | 620.73.04 | – | 2026-11-23 | [v4-vfx-truehdr](v4-vfx-truehdr/NOTES.md): works, 1.1 ms at 4K, output tagged HDR10 (no static metadata); HDR viewing skipped |
-| V5 | VFX VSR quality vs bicubic? | – | 620.73.04 | – | – | |
+| V5 | VFX VSR quality vs bicubic? | ✅ | 620.73.04 | – | 2026-11-23 | [v5-vsr-quality](v5-vsr-quality/NOTES.md): 540p→1080p VSR ULTRA +1.4 dB / +7 VMAF over Lanczos; reduces blocking; STREAMING_ULTRA over-sharpens |
 | S1 | NGX reports DLSS SR and Frame Gen available to our own Vulkan app? | – | 620.73.04 | – | – | |
 | S2 | DLSS SR upscales an image in our own app? | – | 620.73.04 | – | – | |
 | S3 | **DLSS-G generates frames outside a game (Veyra's approach)?** | – | 620.73.04 | – | – | Biggest risk |
