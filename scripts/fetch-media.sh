@@ -8,9 +8,10 @@
 #
 # Outputs
 #   src_1080p.mp4      Sintel, 10 s of action, 1080p H.264 near-lossless (reference)
-#   lq_1080p.mp4       1080p, heavy compression (stream-like)
-#   lq_720p.mp4        720p,  heavy compression
-#   lq_540p.mp4        540p,  heavy compression
+#   lq_1080p.mp4       1080p, ~3.2 Mbit/s (moderate compression; VMAF ~95 vs src_1080p)
+#   lq_720p.mp4        720p,  ~2.2 Mbit/s (resolution-limited input for upscaling tests)
+#   lq_540p.mp4        540p,  ~1.6 Mbit/s (resolution-limited input for upscaling tests)
+#   (V2 makes its own heavily compressed 600 kbit/s clip for the denoise test.)
 #   drift_360p60.mp4   NVIDIA clip, 10 s, native 360p 60 fps
 #   synth_1080p.mp4    synthetic: moving text, then scrolling bars (10 s, 60 fps)
 #   src_4k_{h264,hevc,av1}.mkv   4K60 encodes for decode tests (NVENC)
