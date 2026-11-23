@@ -1,0 +1,83 @@
+# sysinfo 2026-11-23T19:44:50+06:00
+
+## System
+kernel: 7.3.5-arch1-1
+cpu: AMD Ryzen 9 9950X 16-Core Processor
+ram: 30Gi
+session: wayland / KDE
+
+## GPU / driver
+NVIDIA GeForce RTX 5080, 620.73.04, 16303 MiB, 00000000:01:00.0
+nvidia-open-dkms 620.73.04-1
+nvidia-utils 620.73.04-1
+cuda 13.5.0-1
+
+## Vulkan
+api: apiVersion        = 1.4.357 (4211045)
+VK_NV_optical_flow                 yes
+VK_KHR_external_memory_fd          yes
+VK_KHR_external_semaphore_fd       yes
+VK_EXT_external_memory_dma_buf     yes
+VK_EXT_image_drm_format_modifier   yes
+VK_KHR_video_decode_queue          yes
+VK_KHR_video_decode_h264           yes
+VK_KHR_video_decode_h265           yes
+VK_KHR_video_decode_av1            yes
+VK_KHR_present_wait                yes
+VK_KHR_present_id                  yes
+VK_EXT_present_timing              yes
+VK_EXT_swapchain_maintenance1      yes
+VK_NV_low_latency2                 yes
+VK_EXT_hdr_metadata                yes
+VK_EXT_swapchain_colorspace        yes
+VK_KHR_wayland_surface             yes
+VK_KHR_timeline_semaphore          yes
+
+## NGX libraries
+/usr/lib/libnvidia-ngx-builtin-dlssd.so
+/usr/lib/libnvidia-ngx-builtin-dlssd.so.310.9.0
+/usr/lib/libnvidia-ngx.so
+/usr/lib/libnvidia-ngx.so.1
+/usr/lib/libnvidia-ngx.so.620.73.04
+wine: ngx-builtins
+wine: _nvngx.dll
+wine: nvngx.dll
+wine: nvngx_dlssd.dll
+wine: nvngx_dlssg.dll
+wine: nvngx_update.exe
+
+## Proton (dxvk-nvapi)
+cachyos-11.0-20261015-slr                dxvk-nvapi=v0.9.2
+GE-Proton10-34                           dxvk-nvapi=v0.9.1
+GE-Proton11-12                           dxvk-nvapi=v0.9.3
+Proton 10.0                              dxvk-nvapi=v0.9.0
+Proton 11.0                              dxvk-nvapi=v0.9.2
+Proton - Experimental                    dxvk-nvapi=v0.9.3
+Proton Hotfix                            dxvk-nvapi=?
+
+## Display
+Output: 1 DP-6 46d45009-671d-45e9-8e5d-99505213645e
+	Modes:  1:2560x1440@59.95!  2:2560x1440@165.00*  3:2560x1440@143.99  4:2560x1440@120.00  5:1920x1080@164.92  6:1920x1080@119.93  7:1920x1080@60.00  8:1920x1080@59.94  9:1920x1080@50.00  10:1680x1050@69.88  11:1680x1050@59.95  12:1600x900@60.00  13:1280x1024@75.03  14:1280x1024@69.83  15:1280x1024@60.02  16:1440x900@59.89  17:1280x720@59.94  18:1280x720@50.00  19:1024x768@75.03  20:1024x768@70.07  21:1024x768@60.00  22:800x600@75.00  23:800x600@72.19  24:800x600@60.32  25:720x576@50.00  26:720x480@59.94  27:640x480@75.00  28:640x480@72.81  29:640x480@59.94  30:640x480@59.93 
+	HDR: disabled
+
+## Packages
+ffmpeg-obs 9.1-1
+mpv 1:0.42.0-3
+obs-studio-tytan652 33.0.2-2
+pipewire 1:1.6.11-2
+wireplumber 0.5.19-1
+xdg-desktop-portal-kde 6.8.3-1
+libportal 0.11.0-1
+v4l2loopback-dkms 0.15.4-2
+vulkan-headers 1:1.4.363.0-1
+volk 1.4.363.0-1
+vulkan-memory-allocator 3.5.0-1
+directx-shader-compiler 1.10.2605.37-1
+vulkan-validation-layers 1.4.363.1-1
+sdl3 3.4.20-1
+spdlog 1.17.0-2
+cli11 2.7.2-1
+tomlplusplus 3.4.0-3
+stb 20260415.205329.g31c1ad374564-1
+uv 0.13.9-1
+git-lfs 3.8.1-1
