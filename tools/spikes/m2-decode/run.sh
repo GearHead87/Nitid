@@ -35,6 +35,6 @@ for c in h264 hevc av1; do
 done
 
 echo
-echo "Vulkan decode log check (first lines mentioning the device / hwaccel):"
+echo "GPU used by Vulkan decoding (this PC also has an AMD iGPU):"
 ffmpeg -hide_banner -nostdin -v verbose -hwaccel vulkan -hwaccel_output_format vulkan \
-  -i "$m/src_4k_hevc.mkv" -frames:v 10 -f null - 2>&1 | grep -iE 'vulkan|device|hwaccel' | head -8
+  -i "$m/src_4k_hevc.mkv" -frames:v 10 -f null - 2>&1 | grep -E 'Device [0-9]+ selected'

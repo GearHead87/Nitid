@@ -35,7 +35,7 @@ the plan work on the target Linux setup?** The full plan is in [TESTPLAN.md](TES
 | S8 | Capture card frames into Vulkan (direct or upload)? | – | 620.73.04 | – | – | Needs a capture card |
 | F1 | Optical flow + DLSS-G on a real clip looks good vs VFX frame gen? | – | 620.73.04 | – | – | |
 
-Result values: ✅ pass · ❌ fail · ⚠️ partial · – not run yet.
+Result values: ✅ pass · ❌ fail · ⚠️ partial · ⏳ waiting for the user's report · ⏭️ skipped · – not run yet.
 
 ## Layout
 
