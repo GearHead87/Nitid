@@ -20,7 +20,7 @@ the plan work on the target Linux setup?** The full plan is in [TESTPLAN.md](TES
 | M6 | Capture card formats and live video? | ⏭️ | 620.73.04 | – | – | [m6-capture-card](m6-capture-card/NOTES.md): skipped, no capture card |
 | V1 | VFX VSR runs; 1080p→4K ≥ 60 fps? | ✅ | 620.73.04 | – | 2026-11-23 | [v1-vfx-vsr](v1-vfx-vsr/NOTES.md): 1080p→4K HIGH 2.9 ms/frame (344 fps) GPU-only; all modes real-time |
 | V2 | VFX denoise / deblur visibly better? | ⚠️ | 620.73.04 | – | 2026-11-23 | [v2-vfx-denoise-deblur](v2-vfx-denoise-deblur/NOTES.md): fast (1–5.6 ms at 1080p) but no measurable cleanup; denoise softens blocks slightly, deblur worsens them |
-| V3 | VFX frame generation 2x / 4x works in real time? | – | 620.73.04 | – | – | |
+| V3 | VFX frame generation 2x / 4x works in real time? | ✅ | 620.73.04 | – | 2026-11-23 | [v3-vfx-frame-gen](v3-vfx-frame-gen/NOTES.md): 1440p MEDIUM 1.7 ms/frame; beats blending by 2–4 dB; default shot-change detection misfires on fast motion (turn off) |
 | V4 | VFX TrueHDR output correct in HDR? | – | 620.73.04 | – | – | |
 | V5 | VFX VSR quality vs bicubic? | – | 620.73.04 | – | – | |
 | S1 | NGX reports DLSS SR and Frame Gen available to our own Vulkan app? | – | 620.73.04 | – | – | |

@@ -5,3 +5,4 @@ compile_commands.json
 /third_party/
 /results/
 /tools/spikes/**/.venv/
+__pycache__/
