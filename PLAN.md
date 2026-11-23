@@ -10,7 +10,40 @@ shader logic, and runs on NVIDIA's Linux SDKs.
 |---|---|
 | Name, plan, repo | ✅ Done |
 | Project setup: engine + GUI + CLI layout, CMake build, install/package files | ✅ Done (placeholder code; combined and standalone builds tested) |
-| Phase 0: feasibility tests | ⏭️ Next: plan in [tools/spikes/TESTPLAN.md](tools/spikes/TESTPLAN.md), results in [tools/spikes/README.md](tools/spikes/README.md) |
+| Phase 0: feasibility tests | ✅ Mostly done (2026-11-23): plan in [tools/spikes/TESTPLAN.md](tools/spikes/TESTPLAN.md), results in [tools/spikes/README.md](tools/spikes/README.md). Waiting on the user: G1–G5 (game results), M5 (`sudo modprobe`). Postponed: HDR (M3, H1, V4 viewing). Skipped: capture card (M6, S8). |
+| Phase 1: basic player | ⏭️ Next |
+
+## Phase 0 findings (what changed in the plan)
+
+Everything the plan depends on works on the target machine (RTX 5080, driver 620.73, KDE Wayland):
+
+| Module | Verdict | Key numbers |
+|---|---|---|
+| GPU decode (Vulkan Video / NVDEC) | ✅ | 4K: 380–520 fps (M2) |
+| NVENC recording | ✅ | 4K60 HEVC/AV1 p5 ~135 fps (M1) |
+| VFX VSR upscaling | ✅ **default upscaler** | 1080p→4K HIGH 2.9 ms; +1.1–1.4 dB / +6–8 VMAF over Lanczos (V1, V5) |
+| VFX frame generation | ✅ **default frame generator** | 1440p MEDIUM 1.7 ms/frame; best quality on video at 2x–6x (V3, S3, F1) |
+| VFX TrueHDR | ✅ runs (viewing postponed) | 4K 1.1 ms (V4) |
+| VFX denoise / deblur | ⚠️ optional only | don't fix heavy blocking; deblur worsens it (V2) |
+| Vulkan ↔ CUDA ↔ VFX zero-copy | ✅ | +0.2–0.4 ms over VSR alone, bit-identical output (S5) |
+| DLSS SR (native Vulkan NGX) | ✅ | 0.44–0.62 ms to 1080p; needs jitter to add detail (S2) |
+| DLSS-G (native, 2x–6x) | ✅ works | ~1 ms first frame, ~0.4 ms each extra at 1080p (S3) |
+| Veyra-style DLSS-G on video (optical flow → MVs) | ⚠️ works, no quality gain | estimated MVs ≤ zero MVs; VFX VFG better (F1) |
+| `VK_NV_optical_flow` | ✅ | sub-pixel; 1080p 4x4 grid 0.54–0.75 ms (S4) |
+| PipeWire screen capture → Vulkan DMA-BUF | ✅ | zero-copy, 0.4–0.6 ms import, restore token (S6, M4) |
+| Display pacing (FIFO, 165 Hz) | ✅ | 6.061 ± 0.027 ms; present_timing can't schedule (S7) |
+
+Plan changes:
+
+1. **Frame generation default = VFX VFG** (MEDIUM for 60 fps sources, HIGH for films), with Nitid's
+   own shot-change detection (VFX's automatic detection misfires on fast motion, V3).
+2. **Phase 4 shrinks:** DLSS-G on video stays an *optional* mode, mainly **DLSS-G lite + optical flow**
+   as a very cheap high-multiplier option (F1). Full Veyra-style DLSS is no longer a headline feature.
+3. **Motion-vector convention for DLSS-G:** pixels, `mvecScale = 1`, optical flow input = current frame,
+   reference = previous frame (F1). DLSS SR jitter must be passed negated (S2).
+4. **Pick the NVIDIA GPU explicitly** (this machine also has an AMD iGPU; M2, S1).
+5. **Pacing:** output at the display refresh with FIFO and choose the frame per vblank; VRR and
+   fullscreen to be tested in Phases 1–3 (S7).
 
 ## 1. Goal
 
