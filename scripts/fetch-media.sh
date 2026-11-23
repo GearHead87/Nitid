@@ -1,27 +1,36 @@
 #!/usr/bin/env bash
 # Build the test clips used by the spikes into results/media/ (git-ignored).
-# Needs scripts/fetch-sdks.sh first (uses NVIDIA's sample clip as the real-world source).
+# Needs scripts/fetch-sdks.sh first (for NVIDIA's sample clip).
 #
-#   src_1080p.mp4      NVIDIA sample clip, normalised to 1080p H.264, 10 s
+# Sources
+#   sintel_trailer-1080p.mp4   Blender Foundation "Sintel" trailer, 1080p24, CC-BY 3.0 (real 1080p source)
+#   Drift_RUN_Master_Custom.mp4  NVIDIA VFX sample clip, 640x360 60 fps (native low-res input)
+#
+# Outputs
+#   src_1080p.mp4      Sintel, 10 s of action, 1080p H.264 near-lossless (reference)
 #   lq_1080p.mp4       1080p, heavy compression (stream-like)
 #   lq_720p.mp4        720p,  heavy compression
 #   lq_540p.mp4        540p,  heavy compression
-#   synth_1080p.mp4    synthetic: moving text, scrolling pattern, scene cut (10 s, 60 fps)
+#   drift_360p60.mp4   NVIDIA clip, 10 s, native 360p 60 fps
+#   synth_1080p.mp4    synthetic: moving text, then scrolling bars (10 s, 60 fps)
 #   src_4k_{h264,hevc,av1}.mkv   4K60 encodes for decode tests (NVENC)
-#   frames/            PNG frame pairs for the C++ spikes
+#   frames/            PNG frame pairs / sequences for the C++ spikes
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 m="$root/results/media"
 mkdir -p "$m/frames"
-sample="$root/third_party/nvidia-vfx-python-samples/assets/Drift_RUN_Master_Custom.mp4"
 ff=(ffmpeg -hide_banner -loglevel error -y)
 
-[ -f "$sample" ] || { echo "missing $sample (run scripts/fetch-sdks.sh)"; exit 1; }
+sintel="$m/sintel_trailer-1080p.mp4"
+drift="$root/third_party/nvidia-vfx-python-samples/assets/Drift_RUN_Master_Custom.mp4"
+[ -f "$drift" ] || { echo "missing $drift (run scripts/fetch-sdks.sh)"; exit 1; }
+[ -f "$sintel" ] || curl -fL --retry 3 -o "$sintel" \
+  https://download.blender.org/durian/trailer/sintel_trailer-1080p.mp4
 
-echo ">> source clip"
-"${ff[@]}" -i "$sample" -t 10 -vf "scale=1920:1080:flags=lanczos,format=yuv420p" \
-  -c:v libx264 -crf 14 -preset slow -an "$m/src_1080p.mp4"
+echo ">> reference clip (Sintel 1080p, 10 s from 0:20)"
+"${ff[@]}" -ss 20 -i "$sintel" -t 10 -vf "format=yuv420p" \
+  -c:v libx264 -crf 12 -preset slow -an "$m/src_1080p.mp4"
 
 echo ">> low-quality variants"
 for r in 1080 720 540; do
@@ -31,6 +40,9 @@ for r in 1080 720 540; do
     "$m/lq_${r}p.mp4"
 done
 
+echo ">> NVIDIA sample clip, native 360p60"
+"${ff[@]}" -i "$drift" -t 10 -c:v libx264 -crf 16 -preset slow -an "$m/drift_360p60.mp4"
+
 echo ">> synthetic clip"
 "${ff[@]}" -f lavfi -i "testsrc2=s=1920x1080:r=60:d=5" \
   -f lavfi -i "smptehdbars=s=1920x1080:r=60:d=5" \
@@ -39,15 +51,19 @@ echo ">> synthetic clip"
   -map "[out]" -c:v libx264 -crf 16 -pix_fmt yuv420p "$m/synth_1080p.mp4"
 
 echo ">> 4K60 decode-test encodes"
-"${ff[@]}" -stream_loop -1 -i "$m/src_1080p.mp4" -t 10 -vf "scale=3840:2160:flags=lanczos,fps=60" \
-  -c:v h264_nvenc -preset p5 -b:v 40M "$m/src_4k_h264.mkv"
-"${ff[@]}" -stream_loop -1 -i "$m/src_1080p.mp4" -t 10 -vf "scale=3840:2160:flags=lanczos,fps=60" \
-  -c:v hevc_nvenc -preset p5 -b:v 30M "$m/src_4k_hevc.mkv"
-"${ff[@]}" -stream_loop -1 -i "$m/src_1080p.mp4" -t 10 -vf "scale=3840:2160:flags=lanczos,fps=60" \
-  -c:v av1_nvenc -preset p5 -b:v 25M "$m/src_4k_av1.mkv"
+for c in h264:40M hevc:30M av1:25M; do
+  "${ff[@]}" -stream_loop -1 -i "$m/src_1080p.mp4" -t 10 -vf "scale=3840:2160:flags=lanczos,fps=60" \
+    -c:v "${c%%:*}_nvenc" -preset p5 -b:v "${c##*:}" "$m/src_4k_${c%%:*}.mkv"
+done
 
-echo ">> frame pairs"
+echo ">> frame pairs / sequences"
+rm -f "$m"/frames/*.png
 "${ff[@]}" -ss 3 -i "$m/src_1080p.mp4" -frames:v 2 "$m/frames/pair_1080p_%d.png"
 "${ff[@]}" -ss 3 -i "$m/lq_540p.mp4" -frames:v 30 "$m/frames/seq_540p_%02d.png"
+"${ff[@]}" -ss 3 -i "$m/drift_360p60.mp4" -frames:v 2 "$m/frames/pair_drift360_%d.png"
 
-ls -la "$m" "$m/frames" | sed 's/^/  /'
+for f in "$m"/*.mp4 "$m"/*.mkv; do
+  printf '  %-26s %s\n' "$(basename "$f")" \
+    "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height,r_frame_rate -of csv=p=0 "$f")"
+done
+echo "  frames: $(ls "$m/frames" | wc -l) PNGs"
