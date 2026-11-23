@@ -1,0 +1,88 @@
+# Spikes
+
+Small, standalone test programs and scripts that answer one question each: **does this part of
+the plan work on the target Linux setup?** The full plan is in [TESTPLAN.md](TESTPLAN.md).
+
+## Results
+
+| ID | Question | Result | Driver | Proton | Date | Notes |
+|---|---|---|---|---|---|---|
+| G1 | DLSS SR + Frame Gen 2x work in a Proton game? | – | 620.73.04 | Experimental (0.9.3) | – | |
+| G2 | Multi Frame Gen 4x override works? Which Proton builds? | – | 620.73.04 | Exp / GE11-12 / CachyOS / 11.0 | – | |
+| G3 | Newest DLSS preset override works? | – | 620.73.04 | Experimental | – | |
+| G4 | Smooth Motion works on a game without DLSS? | – | 620.73.04 | Experimental | – | |
+| G5 | Frame gen lag acceptable? (optional) | – | 620.73.04 | – | – | |
+| M1 | NVENC H.264 / HEVC / AV1 faster than real time at 4K60? | – | 620.73.04 | – | – | |
+| M2 | Vulkan and CUDA decoding ≥ 120 fps at 4K? | – | 620.73.04 | – | – | |
+| M3 | HDR output on KDE Wayland + NVIDIA? | – | 620.73.04 | – | – | |
+| M4 | PipeWire screen capture works? | – | 620.73.04 | – | – | |
+| M5 | v4l2loopback virtual camera works? | – | 620.73.04 | – | – | |
+| M6 | Capture card formats and live video? | – | 620.73.04 | – | – | Needs a capture card |
+| V1 | VFX VSR runs; 1080p→4K ≥ 60 fps? | – | 620.73.04 | – | – | |
+| V2 | VFX denoise / deblur visibly better? | – | 620.73.04 | – | – | |
+| V3 | VFX frame generation 2x / 4x works in real time? | – | 620.73.04 | – | – | |
+| V4 | VFX TrueHDR output correct in HDR? | – | 620.73.04 | – | – | |
+| V5 | VFX VSR quality vs bicubic? | – | 620.73.04 | – | – | |
+| S1 | NGX reports DLSS SR and Frame Gen available to our own Vulkan app? | – | 620.73.04 | – | – | |
+| S2 | DLSS SR upscales an image in our own app? | – | 620.73.04 | – | – | |
+| S3 | **DLSS-G generates frames outside a game (Veyra's approach)?** | – | 620.73.04 | – | – | Biggest risk |
+| S3b | Veyra's DLSS-G on video works under Proton? (only if S3 fails) | – | 620.73.04 | GE11-12 / Exp | – | |
+| S4 | `VK_NV_optical_flow` gives sensible motion < 2 ms at 1080p? | – | 620.73.04 | – | – | |
+| S5 | Vulkan ↔ CUDA ↔ VFX VSR with no CPU copy? | – | 620.73.04 | – | – | |
+| S6 | PipeWire screen frames imported into Vulkan via DMA-BUF? | – | 620.73.04 | – | – | |
+| H1 | HDR10 swapchain offered and shown correctly? | – | 620.73.04 | – | – | |
+| S7 | Frame timing within ±0.5 ms with present timing? | – | 620.73.04 | – | – | |
+| S8 | Capture card frames into Vulkan (direct or upload)? | – | 620.73.04 | – | – | Needs a capture card |
+| F1 | Optical flow + DLSS-G on a real clip looks good vs VFX frame gen? | – | 620.73.04 | – | – | |
+
+Result values: ✅ pass · ❌ fail · ⚠️ partial · – not run yet.
+
+## Layout
+
+```
+tools/spikes/
+  README.md                 this index and the results table
+  TESTPLAN.md               the full test plan
+  CMakeLists.txt            builds only the spikes (separate from the main build)
+  common/                   small shared helpers (Vulkan setup, saving PNGs)
+  00-vfx-python/            VFX SDK test in Python
+  01-ngx-caps/              each spike: main.cpp, CMakeLists.txt, NOTES.md
+  02-dlss-sr-image/
+  03-dlssg-standalone/
+  04-nvof-pair/
+  05-cuda-vk-vsr/
+  06-pipewire-dmabuf/
+  07-hdr-swapchain/
+  08-present-timing/
+  09-v4l2-import/
+third_party/                NVIDIA SDKs, downloaded by scripts/fetch-sdks.sh (git-ignored)
+results/                    test output: logs, PNGs, videos (git-ignored)
+scripts/                    sysinfo.sh, fetch-sdks.sh, fetch-media.sh
+```
+
+## Rules
+
+1. **Each spike answers one question** and records the answer in its `NOTES.md`: pass or fail,
+   the driver version, the exact output and anything surprising. Then update the table above.
+2. **Spikes don't use `libnitid`, and the engine doesn't use spikes.** They are built separately
+   (`cmake -S tools/spikes`), so the main build never needs the NVIDIA SDKs because of a spike.
+3. **Don't move spike code straight into the engine.** When a spike works, rewrite that piece
+   properly in `libnitid` and keep the spike as the reference.
+4. **Once a spike has its answer, stop maintaining it.** It's a record. If it breaks later, that's fine.
+5. **Never commit the NVIDIA SDKs.** They are large and their licenses limit sharing them.
+6. **No Veyra code in this repo until the license is decided.** Refer to Veyra by link and commit.
+
+## `NOTES.md` template
+
+```markdown
+# <ID>: <question>
+
+- **Result:** ✅ / ❌ / ⚠️
+- **Date:**
+- **Driver / Proton / SDK versions:**
+- **How to run:**
+- **Output:** (paste the important lines)
+- **Timings:**
+- **Surprises / gotchas:**
+- **What this means for PLAN.md:**
+```

@@ -10,7 +10,7 @@ shader logic, and runs on NVIDIA's Linux SDKs.
 |---|---|
 | Name, plan, repo | ✅ Done |
 | Project setup: engine + GUI + CLI layout, CMake build, install/package files | ✅ Done (placeholder code; combined and standalone builds tested) |
-| Phase 0: feasibility tests | ⏭️ Next |
+| Phase 0: feasibility tests | ⏭️ Next: plan in [tools/spikes/TESTPLAN.md](tools/spikes/TESTPLAN.md), results in [tools/spikes/README.md](tools/spikes/README.md) |
 
 ## 1. Goal
 
@@ -112,6 +112,8 @@ both combined and per component. The code is placeholders that only prove the ap
 
 **Phase 0: Feasibility tests (about 1 week).** Small standalone programs in `tools/spikes/` that each
 test one risky piece before we build on it. What works moves into `libnitid` in later phases.
+The detailed test plan (games, tools, VFX SDK and C++ spikes) is in
+[tools/spikes/TESTPLAN.md](tools/spikes/TESTPLAN.md). The main questions:
 
 1. DLSS upscaling through Vulkan NGX: create the feature on driver 620 and upscale one test image.
 2. **DLSS Frame Gen in our own Vulkan app** (the biggest risk). Veyra does this in DirectX 12, but the
