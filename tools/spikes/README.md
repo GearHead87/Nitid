@@ -7,13 +7,13 @@ the plan work on the target Linux setup?** The full plan is in [TESTPLAN.md](TES
 
 | ID | Question | Result | Driver | Proton | Date | Notes |
 |---|---|---|---|---|---|---|
-| G1 | DLSS SR + Frame Gen 2x work in a Proton game? | – | 620.73.04 | Experimental (0.9.3) | – | |
-| G2 | Multi Frame Gen 4x override works? Which Proton builds? | – | 620.73.04 | Exp / GE11-12 / CachyOS / 11.0 | – | |
-| G3 | Newest DLSS preset override works? | – | 620.73.04 | Experimental | – | |
-| G4 | Smooth Motion works on a game without DLSS? | – | 620.73.04 | Experimental | – | |
-| G5 | Frame gen lag acceptable? (optional) | – | 620.73.04 | – | – | |
+| G1 | DLSS SR + Frame Gen 2x work in a Proton game? | ⏳ | 620.73.04 | Experimental (0.9.3) | – | [g1-dlss-fg-proton](g1-dlss-fg-proton/NOTES.md): run by user, result not reported yet |
+| G2 | Multi Frame Gen 4x override works? Which Proton builds? | ⏳ | 620.73.04 | Exp / GE11-12 / CachyOS / 11.0 | – | [g2-mfg-override](g2-mfg-override/NOTES.md): run by user, result not reported yet |
+| G3 | Newest DLSS preset override works? | ⏳ | 620.73.04 | Experimental | – | [g3-dlss-preset-override](g3-dlss-preset-override/NOTES.md): run by user, result not reported yet |
+| G4 | Smooth Motion works on a game without DLSS? | ⏳ | 620.73.04 | Experimental | – | [g4-smooth-motion](g4-smooth-motion/NOTES.md): run by user, result not reported yet |
+| G5 | Frame gen lag acceptable? (optional) | ⏳ | 620.73.04 | – | – | [g5-fg-latency-feel](g5-fg-latency-feel/NOTES.md): run by user, result not reported yet |
 | M1 | NVENC H.264 / HEVC / AV1 faster than real time at 4K60? | ✅ | 620.73.04 | – | 2026-11-23 | [m1-nvenc](m1-nvenc/NOTES.md): HEVC/AV1 p5 ~135 fps, H.264 p5 80 fps |
-| M2 | Vulkan and CUDA decoding ≥ 120 fps at 4K? | – | 620.73.04 | – | – | |
+| M2 | Vulkan and CUDA decoding ≥ 120 fps at 4K? | ✅ | 620.73.04 | – | 2026-11-23 | [m2-decode](m2-decode/NOTES.md): Vulkan ~380–405 fps, NVDEC ~460–520 fps |
 | M3 | HDR output on KDE Wayland + NVIDIA? | – | 620.73.04 | – | – | |
 | M4 | PipeWire screen capture works? | – | 620.73.04 | – | – | |
 | M5 | v4l2loopback virtual camera works? | – | 620.73.04 | – | – | |
