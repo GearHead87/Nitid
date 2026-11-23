@@ -2,6 +2,8 @@
 # Download the NVIDIA SDKs used by the spikes into third_party/ (git-ignored).
 #   third_party/DLSS                       NVIDIA DLSS SDK, tag v310.9.16 (include/, lib/Linux_x86_64/, doc/ only)
 #   third_party/nvidia-vfx-python-samples  NVIDIA VFX Python samples (+ sample videos via git-lfs)
+#   third_party/Maxine-VFX-SDK             NVIDIA VFX SDK C headers (MIT; nvvfx/include only), used with the
+#                                          runtime libraries from the nvidia-vfx wheel (tools/spikes/vfx-env)
 # Re-running is safe: existing checkouts are left alone.
 set -euo pipefail
 
@@ -30,6 +32,16 @@ else
   echo ">> VFX samples already present"
 fi
 
+if [ ! -d "$tp/Maxine-VFX-SDK/.git" ]; then
+  echo ">> NVIDIA Maxine VFX SDK headers (sparse: nvvfx/include)"
+  git clone --depth 1 --filter=blob:none --sparse \
+    https://github.com/NVIDIA-Maxine/Maxine-VFX-SDK.git "$tp/Maxine-VFX-SDK"
+  git -C "$tp/Maxine-VFX-SDK" sparse-checkout set nvvfx/include
+else
+  echo ">> VFX SDK headers already present"
+fi
+
 echo ">> done"
 git -C "$tp/DLSS" describe --tags 2>/dev/null | sed 's/^/DLSS: /'
 git -C "$tp/nvidia-vfx-python-samples" log -1 --format='VFX samples: %h %cs' 2>/dev/null
+git -C "$tp/Maxine-VFX-SDK" log -1 --format='VFX headers: %h %cs' 2>/dev/null
