@@ -29,7 +29,7 @@ the plan work on the target Linux setup?** The full plan is in [TESTPLAN.md](TES
 | S3b | Veyra's DLSS-G on video works under Proton? (only if S3 fails) | ⏭️ | 620.73.04 | GE11-12 / Exp | 2026-11-23 | [s3b-veyra-proton](s3b-veyra-proton/NOTES.md): not needed, S3 passed |
 | S4 | `VK_NV_optical_flow` gives sensible motion < 2 ms at 1080p? | ✅ | 620.73.04 | – | 2026-11-23 | [s4-nvof-pair](s4-nvof-pair/NOTES.md): sub-pixel accurate; warp +10.7 dB on Sintel; 1080p 4x4 grid 0.54–0.75 ms |
 | S5 | Vulkan ↔ CUDA ↔ VFX VSR with no CPU copy? | ✅ | 620.73.04 | – | 2026-11-23 | [s5-cuda-vk-vsr](s5-cuda-vk-vsr/NOTES.md): zero-copy round trip 0.97 ms (540p→1080p) / 3.3 ms (1080p→4K); output bit-identical to NVIDIA Python VSR |
-| S6 | PipeWire screen frames imported into Vulkan via DMA-BUF? | – | 620.73.04 | – | – | |
+| S6 | PipeWire screen frames imported into Vulkan via DMA-BUF? | ✅ | 620.73.04 | – | 2026-11-23 | [s6-pipewire-dmabuf](s6-pipewire-dmabuf/NOTES.md): 120/120 frames DMA-BUF → Vulkan, 2560x1440, NVIDIA modifier, 0.4–0.6 ms import; restore token avoids the dialog |
 | H1 | HDR10 swapchain offered and shown correctly? | ⏭️ | 620.73.04 | – | – | [h1-hdr-swapchain](h1-hdr-swapchain/NOTES.md): skipped for now (HDR postponed) |
 | S7 | Frame timing within ±0.5 ms with present timing? | ✅ | 620.73.04 | – | 2026-11-23 | [s7-present-timing](s7-present-timing/NOTES.md): FIFO 6.061 ± 0.027 ms at 165 Hz, 0 misses; present_timing can't schedule (feedback only) |
 | S8 | Capture card frames into Vulkan (direct or upload)? | ⏭️ | 620.73.04 | – | – | [s8-v4l2-import](s8-v4l2-import/NOTES.md): skipped, no capture card |
