@@ -18,7 +18,7 @@ the plan work on the target Linux setup?** The full plan is in [TESTPLAN.md](TES
 | M4 | PipeWire screen capture works? | ⚠️ | 620.73.04 | – | 2026-11-23 | [m4-screen-capture](m4-screen-capture/NOTES.md): portal v6 ready (monitor/window/virtual); real capture needs user approval |
 | M5 | v4l2loopback virtual camera works? | ⏳ | 620.73.04 | – | 2026-11-23 | [m5-virtual-camera](m5-virtual-camera/NOTES.md): script ready; needs user to run sudo modprobe first |
 | M6 | Capture card formats and live video? | ⏭️ | 620.73.04 | – | – | [m6-capture-card](m6-capture-card/NOTES.md): skipped, no capture card |
-| V1 | VFX VSR runs; 1080p→4K ≥ 60 fps? | – | 620.73.04 | – | – | |
+| V1 | VFX VSR runs; 1080p→4K ≥ 60 fps? | ✅ | 620.73.04 | – | 2026-11-23 | [v1-vfx-vsr](v1-vfx-vsr/NOTES.md): 1080p→4K HIGH 2.9 ms/frame (344 fps) GPU-only; all modes real-time |
 | V2 | VFX denoise / deblur visibly better? | – | 620.73.04 | – | – | |
 | V3 | VFX frame generation 2x / 4x works in real time? | – | 620.73.04 | – | – | |
 | V4 | VFX TrueHDR output correct in HDR? | – | 620.73.04 | – | – | |
