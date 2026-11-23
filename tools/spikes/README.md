@@ -31,7 +31,7 @@ the plan work on the target Linux setup?** The full plan is in [TESTPLAN.md](TES
 | S5 | Vulkan ↔ CUDA ↔ VFX VSR with no CPU copy? | ✅ | 620.73.04 | – | 2026-11-23 | [s5-cuda-vk-vsr](s5-cuda-vk-vsr/NOTES.md): zero-copy round trip 0.97 ms (540p→1080p) / 3.3 ms (1080p→4K); output bit-identical to NVIDIA Python VSR |
 | S6 | PipeWire screen frames imported into Vulkan via DMA-BUF? | – | 620.73.04 | – | – | |
 | H1 | HDR10 swapchain offered and shown correctly? | ⏭️ | 620.73.04 | – | – | [h1-hdr-swapchain](h1-hdr-swapchain/NOTES.md): skipped for now (HDR postponed) |
-| S7 | Frame timing within ±0.5 ms with present timing? | – | 620.73.04 | – | – | |
+| S7 | Frame timing within ±0.5 ms with present timing? | ✅ | 620.73.04 | – | 2026-11-23 | [s7-present-timing](s7-present-timing/NOTES.md): FIFO 6.061 ± 0.027 ms at 165 Hz, 0 misses; present_timing can't schedule (feedback only) |
 | S8 | Capture card frames into Vulkan (direct or upload)? | ⏭️ | 620.73.04 | – | – | [s8-v4l2-import](s8-v4l2-import/NOTES.md): skipped, no capture card |
 | F1 | Optical flow + DLSS-G on a real clip looks good vs VFX frame gen? | ⚠️ | 620.73.04 | – | 2026-11-23 | [f1-flow-dlssg](f1-flow-dlssg/NOTES.md): pipeline works; estimated MVs don't beat zero-MV DLSS-G (block artifacts); VFX VFG best; lite+NVOF = cheap high-multiplier option. MV convention: pixels, mvecScale=1 |
 
