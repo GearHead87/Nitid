@@ -12,7 +12,7 @@ the plan work on the target Linux setup?** The full plan is in [TESTPLAN.md](TES
 | G3 | Newest DLSS preset override works? | – | 620.73.04 | Experimental | – | |
 | G4 | Smooth Motion works on a game without DLSS? | – | 620.73.04 | Experimental | – | |
 | G5 | Frame gen lag acceptable? (optional) | – | 620.73.04 | – | – | |
-| M1 | NVENC H.264 / HEVC / AV1 faster than real time at 4K60? | – | 620.73.04 | – | – | |
+| M1 | NVENC H.264 / HEVC / AV1 faster than real time at 4K60? | ✅ | 620.73.04 | – | 2026-11-23 | [m1-nvenc](m1-nvenc/NOTES.md): HEVC/AV1 p5 ~135 fps, H.264 p5 80 fps |
 | M2 | Vulkan and CUDA decoding ≥ 120 fps at 4K? | – | 620.73.04 | – | – | |
 | M3 | HDR output on KDE Wayland + NVIDIA? | – | 620.73.04 | – | – | |
 | M4 | PipeWire screen capture works? | – | 620.73.04 | – | – | |
