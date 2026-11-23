@@ -26,7 +26,7 @@ the plan work on the target Linux setup?** The full plan is in [TESTPLAN.md](TES
 | S1 | NGX reports DLSS SR and Frame Gen available to our own Vulkan app? | ✅ | 620.73.04 | – | 2026-11-23 | [s1-ngx-caps](s1-ngx-caps/NOTES.md): DLSS SR + DLSS-G available natively; MultiFrameCountMax = 5 (6x); raw-NGX VSR not implemented on Linux |
 | S2 | DLSS SR upscales an image in our own app? | ✅ | 620.73.04 | – | 2026-11-23 | [s2-dlss-sr-image](s2-dlss-sr-image/NOTES.md): DLSS SR native, 0.44–0.62 ms to 1080p; jittered 540p→1080p +6.5 dB over Lanczos (ideal case); jitter sign must be negated |
 | S3 | **DLSS-G generates frames outside a game (Veyra's approach)?** | ✅ | 620.73.04 | – | 2026-11-23 | [s3-dlssg-standalone](s3-dlssg-standalone/NOTES.md): DLSS-G works natively at 2x/4x/6x (~1 ms at 1080p); with zero MVs ≈ VFX LOW/MEDIUM, below VFX HIGH; lite mode = blend without MVs |
-| S3b | Veyra's DLSS-G on video works under Proton? (only if S3 fails) | – | 620.73.04 | GE11-12 / Exp | – | |
+| S3b | Veyra's DLSS-G on video works under Proton? (only if S3 fails) | ⏭️ | 620.73.04 | GE11-12 / Exp | 2026-11-23 | [s3b-veyra-proton](s3b-veyra-proton/NOTES.md): not needed, S3 passed |
 | S4 | `VK_NV_optical_flow` gives sensible motion < 2 ms at 1080p? | – | 620.73.04 | – | – | |
 | S5 | Vulkan ↔ CUDA ↔ VFX VSR with no CPU copy? | – | 620.73.04 | – | – | |
 | S6 | PipeWire screen frames imported into Vulkan via DMA-BUF? | – | 620.73.04 | – | – | |
