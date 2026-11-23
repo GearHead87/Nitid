@@ -1,6 +1,7 @@
 # M4: Does PipeWire screen capture work?
 
-- **Result:** ⚠️ partial: the portal is ready; the actual capture needs the user (KDE permission dialog)
+- **Result:** ✅ pass: portal ready (automatic check) and real capture confirmed by S6 (2026-11-23):
+  KDE dialog approved, 120/120 frames received over PipeWire (DMA-BUF, 2560x1440)
 - **Date:** 2026-11-23
 - **How to run:** `tools/spikes/m4-screen-capture/run.sh` (automatic part), then OBS →
   "Screen Capture (PipeWire)" (needs a person to approve the dialog).
@@ -19,12 +20,11 @@ Services:                  active active active
 - ScreenCast portal **version 6**; sources: **monitor, window and virtual** (7); cursor:
   **hidden, embedded and metadata** (7).
 
-## Still to do (user)
+## Real capture (done via S6)
 
-- [ ] OBS → add "Screen Capture (PipeWire)" → approve the KDE dialog → picture appears.
-
-Spike **S6** (`s6-pipewire-dmabuf`) also needs this dialog once; after that a restore token
-lets it run without asking.
+[S6](../s6-pipewire-dmabuf/NOTES.md) opened a ScreenCast session, the KDE dialog was approved, and
+frames arrived over PipeWire as DMA-BUF and imported into Vulkan. A restore token now lets it run
+without asking. Checking in OBS is optional.
 
 ## What this means for PLAN.md
 

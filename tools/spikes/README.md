@@ -15,7 +15,7 @@ the plan work on the target Linux setup?** The full plan is in [TESTPLAN.md](TES
 | M1 | NVENC H.264 / HEVC / AV1 faster than real time at 4K60? | ✅ | 620.73.04 | – | 2026-11-23 | [m1-nvenc](m1-nvenc/NOTES.md): HEVC/AV1 p5 ~135 fps, H.264 p5 80 fps |
 | M2 | Vulkan and CUDA decoding ≥ 120 fps at 4K? | ✅ | 620.73.04 | – | 2026-11-23 | [m2-decode](m2-decode/NOTES.md): Vulkan ~380–405 fps, NVDEC ~460–520 fps |
 | M3 | HDR output on KDE Wayland + NVIDIA? | ⏭️ | 620.73.04 | – | 2026-11-23 | [m3-hdr-output](m3-hdr-output/NOTES.md): skipped for now |
-| M4 | PipeWire screen capture works? | ⚠️ | 620.73.04 | – | 2026-11-23 | [m4-screen-capture](m4-screen-capture/NOTES.md): portal v6 ready (monitor/window/virtual); real capture needs user approval |
+| M4 | PipeWire screen capture works? | ✅ | 620.73.04 | – | 2026-11-23 | [m4-screen-capture](m4-screen-capture/NOTES.md): portal v6 ready; real capture confirmed by S6 |
 | M5 | v4l2loopback virtual camera works? | ⏳ | 620.73.04 | – | 2026-11-23 | [m5-virtual-camera](m5-virtual-camera/NOTES.md): script ready; needs user to run sudo modprobe first |
 | M6 | Capture card formats and live video? | ⏭️ | 620.73.04 | – | – | [m6-capture-card](m6-capture-card/NOTES.md): skipped, no capture card |
 | V1 | VFX VSR runs; 1080p→4K ≥ 60 fps? | ✅ | 620.73.04 | – | 2026-11-23 | [v1-vfx-vsr](v1-vfx-vsr/NOTES.md): 1080p→4K HIGH 2.9 ms/frame (344 fps) GPU-only; all modes real-time |
