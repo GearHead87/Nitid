@@ -11,7 +11,8 @@ shader logic, and runs on NVIDIA's Linux SDKs.
 | Name, plan, repo | ✅ Done |
 | Project setup: engine + GUI + CLI layout, CMake build, install/package files | ✅ Done (placeholder code; combined and standalone builds tested) |
 | Phase 0: feasibility tests | ✅ Mostly done (2026-11-23): plan in [tools/spikes/TESTPLAN.md](tools/spikes/TESTPLAN.md), results in [tools/spikes/README.md](tools/spikes/README.md). Waiting on the user: G1–G5 (game results), M5 (`sudo modprobe`). Postponed: HDR (M3, H1, V4 viewing). Skipped: capture card (M6, S8). |
-| Phase 1: basic player | ⏭️ Next |
+| **Nitid 0.1 (minimum version)** | ✅ Done (2026-11-26): file → NVDEC + GPU colour conversion → VFX VSR → VFX frame generation → window at the display refresh; `nitid-cli info/bench`. Tests: [tests/v0.1/README.md](tests/v0.1/README.md). Architecture: [docs/architecture.md](docs/architecture.md). |
+| Phase 1: basic player (rest) | ⏭️ Next: audio + A/V sync, ImGui overlay, NIS/FSR1, seeking |
 
 ## Phase 0 findings (what changed in the plan)
 
@@ -44,6 +45,21 @@ Plan changes:
 4. **Pick the NVIDIA GPU explicitly** (this machine also has an AMD iGPU; M2, S1).
 5. **Pacing:** output at the display refresh with FIFO and choose the frame per vblank; VRR and
    fullscreen to be tested in Phases 1–3 (S7).
+
+## Nitid 0.1 findings
+
+The minimum version covers parts of Phases 1 and 2 (file playback, VSR, frame generation, stats, CLI bench).
+What testing it changed or confirmed:
+
+| Finding | Effect on the plan |
+|---|---|
+| VSR +2–9 VMAF over bicubic, frame gen +5–10.7 VMAF over blending on whole clips (04) | Defaults confirmed: VSR HIGH, frame gen MEDIUM |
+| Frame gen "per refresh" (S9's Timestep mode) gives true 165 fps from 24/60 fps video (03) | Default multiplier = one frame per display refresh |
+| Frame gen HIGH (9.7 ms) can't keep 165 Hz inside the render loop (03) | Move VSR and frame gen to a worker that runs ahead of the display (new task, before Phase 3) |
+| VFX SDK needs a blocking CUDA stream (02) | Rule in docs/architecture.md; S5/S9 notes corrected |
+| One present queued ahead locks at 2/3 of 165 Hz on KDE Wayland (01) | Two queued (+6 ms delay); revisit for low-latency live mode |
+| GPU colour conversion makes 4K60 smooth and decoding 8–11x faster (05) | Done; Vulkan Video decode no longer needed for speed |
+| Own scene-cut detector (histogram + thumbnail, sudden-jump rule) finds 7/7 cuts (04, 05) | Kept; VFX automatic detection stays off |
 
 ## 1. Goal
 
@@ -186,30 +202,30 @@ because frame timing and artifact fixes take time. These are estimates.
 One repo with three components. Each component is its own CMake project, so it can be built
 on its own and later shipped as a separate package. Today they are built and shipped together.
 
+As built in 0.1 (details and where each planned feature goes: [docs/architecture.md](docs/architecture.md)):
+
 ```
 nitid/
   CMakeLists.txt          combined build (all components)
   libnitid/               engine library → libnitid.so + CMake package "libnitid"
     include/nitid/        public API (the only thing apps may include)
     src/
-      core/        pipeline, frame scheduler, A/V clock
-      gpu/         Vulkan device, memory (VMA), CUDA & DMA-BUF sharing, timing
-      sources/     ffmpeg_file, v4l2_capture, pipewire_screen
-      audio/       PipeWire output, sync
-      effects/     colorspace, nis, fsr1, cas_sharpen, lut, aa
-      nvidia/vfx/  vsr, vfg, truehdr
-      nvidia/ngx/  dlss_sr, dlss_fg
-      motion/      nvof_vulkan, dis_fallback (ported from Veyra)
-      present/     swapchain, pacing, hdr
-      sinks/       nvenc_record, v4l2loopback
-    shaders/       HLSL → SPIR-V
-    cmake/         package config template
+      engine.cpp   Engine implementation (drives one frame per call)
+      core/        log, errors, queue, timing helpers
+      gpu/         Vulkan device, CUDA context, Vulkan↔CUDA sharing, embedded CUDA kernels (kernels/*.cu)
+      input/       FrameSource: ffmpeg file (now); pipewire screen, v4l2 capture (later); scene cuts
+      vfx/         VFX runtime loader, VSR, frame generation (TrueHDR later)
+      pipeline/    upscale → frame gen chain, display clock, size maths
+      output/      swapchain presenter (NVENC recorder, virtual camera later)
+      (later)      audio/, ngx/ (DLSS), motion/ (optical flow), effects/ (NIS, FSR1, LUT, sharpen)
+    tests/         unit tests (ctest)
+    cmake/         package config template, PTX embedding
   apps/
-    nitid/                GUI player: SDL3 window + ImGui overlay, hotkeys
-    nitid-cli/            headless: export, benchmarks, virtual camera, tests
-  tools/
-    spikes/               Phase 0 feasibility programs
-                          (plus benchmarks and test images later)
+    nitid/src/            GUI player: app, key bindings, ui/ (stats text now, ImGui later)
+    nitid-cli/src/        headless: commands/ (info, bench; export, virtual-camera later), util/
+  tests/v0.1/             feature tests of the minimum version (run.sh + NOTES.md per test)
+  docs/                   architecture, building
+  tools/spikes/           Phase 0 feasibility programs
 ```
 
 **Rules**
