@@ -88,7 +88,9 @@ int main(int argc, char** argv)
     CU_CHECK(cuDevicePrimaryCtxRetain(&ctx, dev));
     CU_CHECK(cuCtxSetCurrent(ctx));
     CUstream st;
-    CU_CHECK(cuStreamCreate(&st, CU_STREAM_NON_BLOCKING));
+    // Blocking stream: the VFX SDK does part of its work on the legacy default stream; a non-blocking
+    // stream neither waits for it (timings too low) nor orders results (VSR returned the previous frame).
+    CU_CHECK(cuStreamCreate(&st, CU_STREAM_DEFAULT));
 
     GpuImg ga = gpu_rgba(w, h), gc = gpu_rgba(w, h);
     CU_CHECK(cuMemcpyHtoD(ga.ptr, a.data(), a.size()));

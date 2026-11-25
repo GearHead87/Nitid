@@ -33,7 +33,7 @@ the plan work on the target Linux setup?** The full plan is in [TESTPLAN.md](TES
 | H1 | HDR10 swapchain offered and shown correctly? | ⏭️ | 620.73.04 | – | – | [h1-hdr-swapchain](h1-hdr-swapchain/NOTES.md): skipped for now (HDR postponed) |
 | S7 | Frame timing within ±0.5 ms with present timing? | ✅ | 620.73.04 | – | 2026-11-23 | [s7-present-timing](s7-present-timing/NOTES.md): FIFO 6.061 ± 0.027 ms at 165 Hz, 0 misses; present_timing can't schedule (feedback only) |
 | S8 | Capture card frames into Vulkan (direct or upload)? | ⏭️ | 620.73.04 | – | – | [s8-v4l2-import](s8-v4l2-import/NOTES.md): skipped, no capture card |
-| S9 | VFX VSR (any output size) and frame generation from C++? | ✅ | 620.73.04 | – | 2026-11-25 | [s9-vfx-cpp-api](s9-vfx-cpp-api/NOTES.md): both work with RGBA8 GPU images; VFG bit-identical to Python; Timestep mode; VSR 1080p→1440p 0.39 ms, VFG MEDIUM 1440p 1.42 ms |
+| S9 | VFX VSR (any output size) and frame generation from C++? | ✅ | 620.73.04 | – | 2026-11-25 | [s9-vfx-cpp-api](s9-vfx-cpp-api/NOTES.md): both work with RGBA8 GPU images; VFG bit-identical to Python; Timestep mode; VSR 1080p→1440p 2.66 ms (corrected), VFG MEDIUM 1440p 1.42 ms; use a blocking CUDA stream |
 | F1 | Optical flow + DLSS-G on a real clip looks good vs VFX frame gen? | ⚠️ | 620.73.04 | – | 2026-11-23 | [f1-flow-dlssg](f1-flow-dlssg/NOTES.md): pipeline works; estimated MVs don't beat zero-MV DLSS-G (block artifacts); VFX VFG best; lite+NVOF = cheap high-multiplier option. MV convention: pixels, mvecScale=1 |
 
 Result values: ✅ pass · ❌ fail · ⚠️ partial · ⏳ waiting for the user's report · ⏭️ skipped · – not run yet.

@@ -6,7 +6,8 @@
 - **Versions:** driver 620.73.04, VFX SDK 1.3.0 (runtime from the `nvidia-vfx` wheel, C headers from
   `NVIDIA-Maxine/Maxine-VFX-SDK`), CUDA driver API, RTX 5080
 - **How to run:** build spikes, then `tools/spikes/s9-vfx-cpp-api/run.sh`
-- **Full output:** [output-2026-11-25.md](output-2026-11-25.md)
+- **Full output:** [output-2026-11-26.md](output-2026-11-26.md) (corrected rerun);
+  [output-2026-11-25.md](output-2026-11-25.md) (first run: VSR times wrong, see the correction below)
 - **Why:** Nitid 0.1 needs both from C++. V3 only tested frame generation through Python, and the monitor
   here is 2560x1440, so 1080p video needs a 1.33x upscale, not 2x.
 
@@ -14,12 +15,17 @@
 
 | Case | VSR HIGH → 2560x1440 (ms) | VFG one frame (ms) |
 |---|---|---|
-| 1080p input, VFG LOW | 0.41 | 0.42 |
-| 1080p input, VFG MEDIUM | 0.39 | 1.35 |
-| 1080p input, VFG HIGH | 0.39 | 9.06 |
-| 1440p input, VFG MEDIUM | 0.55 (1:1) | 1.42 |
+| 1080p input, VFG LOW | 2.66 | 0.41 |
+| 1080p input, VFG MEDIUM | 2.66 | 1.35 |
+| 1080p input, VFG HIGH | 2.66 | 8.90 |
+| 1440p input, VFG MEDIUM | 4.57 (1:1) | 1.42 |
 
-Times are single-frame wall-clock including a stream sync (median of 50).
+Times are single-frame wall-clock including a stream sync (median of 50), from the 2026-11-26 rerun.
+
+> **Correction (2026-11-26):** the first run reported VSR at 0.39 ms. That was wrong: the spike used a
+> *non-blocking* CUDA stream, and the VFX SDK does part of its work on CUDA's legacy default stream, so
+> `cuStreamSynchronize` returned before VSR had finished. With a blocking stream (`CU_STREAM_DEFAULT`) VSR
+> to 1440p takes 2.66 ms, about the same as to 4K (V1: 2.91 ms). Frame generation times were not affected.
 
 | Check (PSNR, dB) | Value |
 |---|---|
@@ -50,7 +56,11 @@ This pair has a fast camera pan, so absolute PSNR is low for every method. VFG s
 
 - **VFG has no `ImageEncodingMode` parameter.** Setting it fails with -5 ("selector not valid"), unlike VSR.
   The Python wrapper's encoding switch only changes how it converts tensors.
-- **VSR to 1440p is much cheaper than to 4K** (0.39 ms vs 2.91 ms in V1). Output pixels dominate the cost.
+- **Use a blocking CUDA stream (`CU_STREAM_DEFAULT`) with the VFX SDK, never `CU_STREAM_NON_BLOCKING`.**
+  With a non-blocking stream VSR's output is not ordered with the caller's work. Found in Nitid 0.1
+  (tests/v0.1/02-upscaling): the window showed the *previous* frame, timings were too low, and syncing the
+  whole context did not help. A blocking stream or stream 0 fixes both.
+- VSR to 1440p costs about the same as to 4K (2.66 vs 2.91 ms): the cost follows the input size (V1).
 - **`Timestep` mode means frame gen does not have to be a whole multiplier.** Nitid can generate the frame
   for the exact moment of each display refresh. For example, 60 fps → 165 Hz becomes smooth without judder.
 
@@ -58,4 +68,5 @@ This pair has a fast camera pan, so absolute PSNR is low for every method. VFG s
 
 Nitid 0.1 can use both effects directly from C++ through the CUDA driver API. Use timestep-based frame
 generation so frames line up with the display refresh (S7: FIFO pacing). Pipeline order: upscale to the
-window size first, then generate frames at that size (1440p: 0.4 + 1.4 ms).
+window size first, then generate frames at that size (1080p → 1440p: 2.7 ms per real frame + 1.4 ms per
+generated frame).

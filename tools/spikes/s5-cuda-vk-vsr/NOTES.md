@@ -38,6 +38,10 @@ wrapped around the shared pointers (`NvCVImage_Init(..., NVCV_RGBA, NVCV_U8, NVC
   work on internal streams and sync with ours. Use the end-to-end round trip instead.
 - The Python wrapper's "RGB8" encoding (float tensors) is only a wrapper convenience: the C API takes
   plain RGBA8 GPU images directly (`ImageEncodingMode = 0`).
+- **Later finding (2026-11-26, Nitid 0.1):** this spike uses a `CU_STREAM_NON_BLOCKING` stream. The VFX
+  SDK does part of its work on CUDA's legacy default stream, so with a non-blocking stream the result is not
+  ordered with our work: on a *video* (changing input) VSR returned the previous frame. This spike feeds the
+  same frame every iteration, which hides it. Use `CU_STREAM_DEFAULT` (see S9 and tests/v0.1/02-upscaling).
 - No CUDA runtime is linked by us: the driver API (`libcuda`) plus the wheel's bundled `libcudart` 12.9
   coexist fine on the primary context.
 
