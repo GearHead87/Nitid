@@ -6,7 +6,8 @@
 - **Setup:** RTX 5080, driver 620.73.04, VFX SDK 1.3.0. Outputs saved lossless (FFV1) and scored with
   `scripts/quality.sh` (PSNR / SSIM / VMAF against the original), then deleted.
 - **How to run:** `tests/v0.1/04-cli-bench/run.sh` (~2 min, no window)
-- **Full output:** [output-2026-11-26.md](output-2026-11-26.md)
+- **Full output:** [output-2026-11-26.md](output-2026-11-26.md) (CPU colour conversion);
+  [rerun with GPU colour conversion](output-2026-11-26-gpu-colour.md) (after [05](../05-gpu-colour/NOTES.md))
 
 ## What `nitid-cli` does now
 
@@ -77,6 +78,21 @@ decode-only reaches only 1.3x real time for the same reason (12.4 ms per frame):
    | **v3: + 32x18 thumbnail difference** | **8** | **7** | 1 (title fade-in at 18) |
 
    v3 is in libnitid now, with unit tests for fades (no cut) and same-histogram cuts (cut).
+
+## Rerun after GPU colour conversion (05)
+
+Scores are the same or slightly better (e.g. 540p VSR HIGH 42.61 dB / VMAF 90.1; trailer frame gen 34.48 dB
+/ VMAF 89.5), and decoding is no longer the limit:
+
+| Input | Settings | Throughput before → after |
+|---|---|---|
+| 1080p24 | decode only | 312 → **2325 fps** |
+| 1080p24 | VSR HIGH → 1440p | 306 → **360 fps** (now VSR-bound, 2.74 ms) |
+| 1080p24 | frame gen MEDIUM 2x | 624 → **1428 fps** |
+| 1080p24 | VSR 1440p + frame gen MEDIUM 4x | 531 → **572 fps** |
+| 4K60 HEVC | decode only | 79 → **662 fps** |
+
+The window check from step 2 still shows the right frame (72) with VSR on and off.
 
 ## What this means
 
