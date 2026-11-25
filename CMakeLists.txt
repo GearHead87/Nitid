@@ -16,6 +16,16 @@ project(nitid_superbuild VERSION 0.1.0 LANGUAGES CXX)
 
 option(NITID_BUILD_GUI "Build the nitid GUI player" ON)
 option(NITID_BUILD_CLI "Build the nitid-cli headless tool" ON)
+option(NITID_BUILD_TESTS "Build libnitid unit tests (ctest)" ON)
+
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE RelWithDebInfo)
+endif()
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+if(NITID_BUILD_TESTS)
+  enable_testing()
+endif()
 
 add_subdirectory(libnitid)
 

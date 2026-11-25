@@ -1,5 +1,8 @@
 @PACKAGE_INIT@
 
+include(CMakeFindDependencyMacro)
+find_dependency(Vulkan)   # public headers use Vulkan handles (nitid/window.hpp)
+
 include("${CMAKE_CURRENT_LIST_DIR}/libnitidTargets.cmake")
 
 check_required_components(libnitid)
