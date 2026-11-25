@@ -17,7 +17,7 @@ public:
 
     // Reloads the model only when something changed (~0.2 s). `input` must stay valid while configured.
     void configure(CUdeviceptr input, unsigned in_w, unsigned in_h, unsigned out_w, unsigned out_h, unsigned quality);
-    void run();  // input -> output(), queued on the stream
+    void run();  // input -> output(), complete when it returns
     CUdeviceptr output() const { return out_.ptr(); }
     bool configured() const { return fx_ != nullptr; }
     void reset();

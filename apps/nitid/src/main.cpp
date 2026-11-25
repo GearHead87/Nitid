@@ -37,6 +37,9 @@ int main(int argc, char** argv)
     cli.add_option("--quit-after", o.quit_after_s, "Close after this many seconds and print a report (for tests)");
     cli.add_flag("--stats", o.print_stats, "Print a stats line every second");
     cli.add_flag("--validation", o.validation, "Enable Vulkan validation layers");
+    cli.add_option("--capture-at", o.capture_at, "Save the window image at these playback times in seconds (tests)")
+        ->expected(1, -1);
+    cli.add_option("--capture-prefix", o.capture_prefix, "File name prefix for --capture-at images");
     CLI11_PARSE(cli, argc, argv);
 
     static const std::map<std::string, SuperResQuality> sr = {{"low", SuperResQuality::Low},

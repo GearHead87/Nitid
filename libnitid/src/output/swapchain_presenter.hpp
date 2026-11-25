@@ -9,6 +9,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace nitid::output {
@@ -26,6 +27,9 @@ public:
     // Presents one frame. `frame` is an RGBA8 GPU buffer of `size` (or 0 for a black frame).
     // Blocks until the display can take another frame. Returns the time in ms spent on the output copy.
     double present(CUdeviceptr frame, pipeline::Size size);
+
+    // Test hook: saves the next presented window image (exactly what goes to the screen) as a PPM file.
+    void capture_next(const std::string& ppm_path) { capture_path_ = ppm_path; }
 
     uint64_t missed_refreshes() const { return missed_; }
     double measured_fps() const { return measured_fps_; }
@@ -51,6 +55,7 @@ private:
     };
 
     void create_swapchain();
+    void save_capture(VkBuffer buf, VkDeviceMemory mem);
     void destroy_swapchain();
     void ensure_slot_size(Slot& s, pipeline::Size size);
     void free_slot_image(Slot& s);
@@ -60,6 +65,9 @@ private:
     VkSurfaceKHR surface_;
     pipeline::Size window_;
     bool dirty_ = false;
+
+    std::string capture_path_;
+    bool can_capture_ = false;  // swapchain images allow TRANSFER_SRC
 
     VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
     VkFormat format_ = VK_FORMAT_B8G8R8A8_UNORM;

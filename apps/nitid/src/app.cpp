@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <format>
 #include <print>
 
 namespace nitid_app {
@@ -123,6 +124,10 @@ int App::run()
             }
         }
         if (!running_) break;
+        if (!opts_.capture_at.empty() && engine_->stats().position_s >= opts_.capture_at.front()) {
+            engine_->capture_next_window_frame(std::format("{}_{:.2f}s.ppm", opts_.capture_prefix, opts_.capture_at.front()));
+            opts_.capture_at.erase(opts_.capture_at.begin());
+        }
         if (!engine_->render_frame()) {
             ended = true;
             break;

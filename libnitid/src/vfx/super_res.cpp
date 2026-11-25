@@ -39,6 +39,8 @@ void SuperRes::configure(CUdeviceptr input, unsigned in_w, unsigned in_h, unsign
     log::info("VSR loaded: {}x{} -> {}x{}, quality {}", in_w, in_h, out_w, out_h, quality);
 }
 
-void SuperRes::run() { api_->check(api_->Run(fx_, 1), "VideoSuperRes run"); }
+// Blocking run (async = 0): the SDK works on internal streams, and with async = 1 the result was not
+// ready for the next operation on our stream (the window showed the previous frame; tests/v0.1/02).
+void SuperRes::run() { api_->check(api_->Run(fx_, 0), "VideoSuperRes run"); }
 
 } // namespace nitid::vfx

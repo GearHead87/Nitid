@@ -18,7 +18,7 @@ public:
     FrameGen& operator=(const FrameGen&) = delete;
 
     void configure(unsigned width, unsigned height, unsigned mode);  // reloads only when changed
-    // timestep in (0, 1): 0 = previous, 1 = current. Queued on the stream; result in output().
+    // timestep in (0, 1): 0 = previous, 1 = current. Complete when it returns; result in output().
     void run(CUdeviceptr previous, CUdeviceptr current, float timestep, bool shot_change);
     CUdeviceptr output() const { return out_.ptr(); }
     bool configured() const { return fx_ != nullptr; }

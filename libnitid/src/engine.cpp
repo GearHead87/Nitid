@@ -259,6 +259,11 @@ bool Engine::render_frame()
     return true;
 }
 
+void Engine::capture_next_window_frame(const std::string& ppm_path)
+{
+    if (impl_->presenter) impl_->presenter->capture_next(ppm_path);
+}
+
 void Engine::set_headless_output(std::uint32_t width, std::uint32_t height)
 {
     Impl& m = *impl_;

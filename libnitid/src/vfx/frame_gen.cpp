@@ -46,7 +46,7 @@ void FrameGen::run(CUdeviceptr previous, CUdeviceptr current, float timestep, bo
     a.check(a.SetImage(fx_, NVVFX_INPUT_IMAGE_1, &cur_img_), "VideoFrameGeneration current");
     a.check(a.SetU32(fx_, "ShotChange", shot_change ? 1 : 0), "VideoFrameGeneration ShotChange");
     a.check(a.SetF32(fx_, "Timestep", timestep), "VideoFrameGeneration Timestep");
-    a.check(a.Run(fx_, 1), "VideoFrameGeneration run");
+    a.check(a.Run(fx_, 0), "VideoFrameGeneration run");  // blocking: see SuperRes::run
 }
 
 } // namespace nitid::vfx

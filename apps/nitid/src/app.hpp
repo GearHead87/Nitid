@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 struct SDL_Window;
 
@@ -21,6 +22,9 @@ struct AppOptions {
     double quit_after_s = 0;     // > 0: close after this long (for tests); prints a final report
     bool print_stats = false;    // one stats line per second on the terminal
     bool validation = false;
+    // Test hook: save the window image at these playback times (seconds) to "<prefix>_<time>s.ppm".
+    std::vector<double> capture_at;
+    std::string capture_prefix = "nitid_capture";
 };
 
 class App {

@@ -69,6 +69,8 @@ public:
     // Renders and presents one display refresh. Blocks until the display can take a new frame.
     // Returns false when the source has ended (and is not looping).
     bool render_frame();
+    // Test hook: saves the next window image (exactly what is presented) as a PPM file.
+    void capture_next_window_frame(const std::string& ppm_path);
 
     // --- Headless output -----------------------------------------------------------------------
     // Produces frames at source fps x multiplier (or source fps with frame gen off), as fast as possible.

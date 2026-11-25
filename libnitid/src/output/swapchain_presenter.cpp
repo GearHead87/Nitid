@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 
 namespace nitid::output {
 
@@ -96,7 +97,8 @@ void SwapchainPresenter::create_swapchain()
     ci.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     ci.imageExtent = extent_;
     ci.imageArrayLayers = 1;
-    ci.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    can_capture_ = caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    ci.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | (can_capture_ ? VK_IMAGE_USAGE_TRANSFER_SRC_BIT : 0);
     ci.preTransform = caps.currentTransform;
     ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     ci.presentMode = VK_PRESENT_MODE_FIFO_KHR;  // steady pacing (spike S7)
@@ -169,6 +171,29 @@ void SwapchainPresenter::ensure_slot_size(Slot& s, pipeline::Size size)
     s.size = size;
 }
 
+void SwapchainPresenter::save_capture(VkBuffer, VkDeviceMemory mem)
+{
+    void* map = nullptr;
+    NITID_VK(vkMapMemory(vk_.device, mem, 0, VK_WHOLE_SIZE, 0, &map));
+    const auto* px = static_cast<const uint8_t*>(map);
+    const bool bgra = format_ == VK_FORMAT_B8G8R8A8_UNORM;
+    std::vector<uint8_t> rgb(size_t(extent_.width) * extent_.height * 3);
+    for (size_t i = 0; i < size_t(extent_.width) * extent_.height; ++i) {
+        rgb[i * 3 + 0] = px[i * 4 + (bgra ? 2 : 0)];
+        rgb[i * 3 + 1] = px[i * 4 + 1];
+        rgb[i * 3 + 2] = px[i * 4 + (bgra ? 0 : 2)];
+    }
+    vkUnmapMemory(vk_.device, mem);
+    if (FILE* f = std::fopen(capture_path_.c_str(), "wb")) {
+        std::fprintf(f, "P6 %u %u 255\n", extent_.width, extent_.height);
+        std::fwrite(rgb.data(), 1, rgb.size(), f);
+        std::fclose(f);
+        log::info("saved window image {}x{} to {}", extent_.width, extent_.height, capture_path_);
+    } else {
+        log::error("cannot write {}", capture_path_);
+    }
+}
+
 double SwapchainPresenter::present(CUdeviceptr frame, pipeline::Size size)
 {
     Slot& s = slots_[frame_ % kFrames];
@@ -236,8 +261,32 @@ double SwapchainPresenter::present(CUdeviceptr frame, pipeline::Size size)
         vkCmdBlitImage(cb, s.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
                        &blit, filter);
     }
-    barrier(cb, target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_ACCESS_TRANSFER_WRITE_BIT,
-            0, T, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+    // Test hook: copy the finished window image to a host buffer.
+    VkBuffer cap_buf = VK_NULL_HANDLE;
+    VkDeviceMemory cap_mem = VK_NULL_HANDLE;
+    VkImageLayout last = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    if (!capture_path_.empty() && can_capture_) {
+        VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+        bci.size = VkDeviceSize(extent_.width) * extent_.height * 4;
+        bci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        NITID_VK(vkCreateBuffer(vk_.device, &bci, nullptr, &cap_buf));
+        VkMemoryRequirements r;
+        vkGetBufferMemoryRequirements(vk_.device, cap_buf, &r);
+        VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+        mai.allocationSize = r.size;
+        mai.memoryTypeIndex = vk_.memory_type(r.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        NITID_VK(vkAllocateMemory(vk_.device, &mai, nullptr, &cap_mem));
+        NITID_VK(vkBindBufferMemory(vk_.device, cap_buf, cap_mem, 0));
+        barrier(cb, target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT,
+                VK_ACCESS_TRANSFER_READ_BIT, T, T);
+        VkBufferImageCopy c{};
+        c.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        c.imageExtent = {extent_.width, extent_.height, 1};
+        vkCmdCopyImageToBuffer(cb, target, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, cap_buf, 1, &c);
+        last = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    }
+    barrier(cb, target, last, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_ACCESS_TRANSFER_WRITE_BIT, 0, T,
+            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
     NITID_VK(vkEndCommandBuffer(cb));
 
     VkSemaphore waits[2] = {s.acquired, has_frame ? s.ready->vk() : VK_NULL_HANDLE};
@@ -252,6 +301,13 @@ double SwapchainPresenter::present(CUdeviceptr frame, pipeline::Size size)
     si.pSignalSemaphores = &rendered_[idx];
     NITID_VK(vkResetFences(vk_.device, 1, &s.fence));
     NITID_VK(vkQueueSubmit(vk_.queue, 1, &si, s.fence));
+    if (cap_buf) {
+        NITID_VK(vkWaitForFences(vk_.device, 1, &s.fence, VK_TRUE, UINT64_MAX));
+        save_capture(cap_buf, cap_mem);
+        vkDestroyBuffer(vk_.device, cap_buf, nullptr);
+        vkFreeMemory(vk_.device, cap_mem, nullptr);
+        capture_path_.clear();
+    }
 
     ++present_id_;
     VkPresentIdKHR pid{VK_STRUCTURE_TYPE_PRESENT_ID_KHR};

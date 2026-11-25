@@ -30,7 +30,10 @@ CudaContext::CudaContext(const std::array<uint8_t, 16>& uuid)
     if (device < 0) fail("No CUDA device matches the Vulkan GPU");
     NITID_CU(cuDevicePrimaryCtxRetain(&ctx, device));
     NITID_CU(cuCtxSetCurrent(ctx));
-    NITID_CU(cuStreamCreate(&stream, CU_STREAM_NON_BLOCKING));
+    // A *blocking* stream (synchronises with CUDA's legacy default stream). The VFX SDK does part of its
+    // work on the default stream; with a non-blocking stream VSR returned the previous frame's result
+    // (tests/v0.1/02-upscaling).
+    NITID_CU(cuStreamCreate(&stream, CU_STREAM_DEFAULT));
     log::debug("CUDA device {} matched to the Vulkan GPU", int(device));
 }
 
