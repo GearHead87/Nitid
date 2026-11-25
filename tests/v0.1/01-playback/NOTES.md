@@ -45,3 +45,4 @@
 - Playback, pacing and the Vulkan output path are confirmed for the next steps (upscaling, frame gen).
 - **Next fix for 4K:** keep NVDEC frames on the GPU and convert NV12 → RGBA there (FFmpeg on CUDA's
   primary context, a small CUDA kernel). This removes the CPU copy, the conversion and the upload.
+  **Done in [05-gpu-colour](../05-gpu-colour/NOTES.md): 4K60 now plays at 165 fps with 0–6 missed refreshes.**

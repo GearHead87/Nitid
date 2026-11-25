@@ -6,19 +6,30 @@ namespace nitid::input {
 
 bool SceneCutDetector::push(const uint8_t* rgba, uint32_t w, uint32_t h)
 {
+    const uint32_t sw = (w + 3) / 4, sh = (h + 3) / 4;
+    sampled_.resize(size_t(sw) * sh);
+    for (uint32_t y = 0; y < sh; ++y)
+        for (uint32_t x = 0; x < sw; ++x) {
+            const uint8_t* p = rgba + (size_t(y) * 4 * w + size_t(x) * 4) * 4;
+            sampled_[size_t(y) * sw + x] = uint8_t((77u * p[0] + 150u * p[1] + 29u * p[2]) >> 8);
+        }
+    return push_luma(sampled_.data(), sw, sh);
+}
+
+bool SceneCutDetector::push_luma(const uint8_t* luma, uint32_t w, uint32_t h)
+{
     std::array<uint32_t, kBins> count{};
     std::array<float, kTw * kTh> sum{};
     std::array<uint32_t, kTw * kTh> cells{};
     uint32_t n = 0;
-    for (uint32_t y = 0; y < h; y += 4) {
-        const uint8_t* row = rgba + size_t(y) * w * 4;
+    for (uint32_t y = 0; y < h; ++y) {
+        const uint8_t* row = luma + size_t(y) * w;
         const uint32_t ty = y * kTh / h;
-        for (uint32_t x = 0; x < w; x += 4) {
-            const uint8_t* p = row + size_t(x) * 4;
-            uint32_t luma = (77u * p[0] + 150u * p[1] + 29u * p[2]) >> 8;
-            ++count[luma * kBins / 256];
+        for (uint32_t x = 0; x < w; ++x) {
+            const uint32_t l = row[x];
+            ++count[l * kBins / 256];
             const uint32_t c = ty * kTw + x * kTw / w;
-            sum[c] += float(luma);
+            sum[c] += float(l);
             ++cells[c];
             ++n;
         }

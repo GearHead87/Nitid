@@ -10,13 +10,17 @@
 // 7 real cuts, 1 borderline extra (a dark scene brightening at once).
 #include <array>
 #include <cstdint>
+#include <vector>
 
 namespace nitid::input {
 
 class SceneCutDetector {
 public:
-    // Returns true if `rgba` starts a new shot compared with the previous frame pushed.
+    // Returns true if the frame starts a new shot compared with the previous frame pushed.
+    // RGBA8 frame (samples every 4th pixel):
     bool push(const uint8_t* rgba, uint32_t width, uint32_t height);
+    // Small full-range luma image (e.g. the GPU path's 1/4-size thumbnail), tightly packed:
+    bool push_luma(const uint8_t* luma, uint32_t width, uint32_t height);
     float last_score() const { return hist_score_; }      // histogram measure for the last frame
     float last_thumb_score() const { return thumb_score_; }
     void reset() { has_prev_ = false, hist_score_ = thumb_score_ = 0; }
@@ -30,6 +34,7 @@ private:
     std::array<float, kTw * kTh> prev_thumb_{};
     bool has_prev_ = false;
     float hist_score_ = 0, thumb_score_ = 0;
+    std::vector<uint8_t> sampled_;
 };
 
 } // namespace nitid::input

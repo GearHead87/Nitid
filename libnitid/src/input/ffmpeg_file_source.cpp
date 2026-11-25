@@ -8,6 +8,7 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/hwcontext.h>
+#include <libavutil/hwcontext_cuda.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/opt.h>
 #include <libavutil/pixdesc.h>
@@ -94,9 +95,17 @@ struct FfmpegFileSource::Ffmpeg {
     }
 };
 
-FfmpegFileSource::FfmpegFileSource(const std::string& path, const OpenOptions& options, int cuda_device)
+FfmpegFileSource::FfmpegFileSource(const std::string& path, const OpenOptions& options, int cuda_device,
+                                   const GpuDecode* gpu)
     : ff_(std::make_unique<Ffmpeg>()), opts_(options)
 {
+    if (gpu && gpu->ctx && gpu->kernels && gpu->kernels->available()) {
+        ctx_ = gpu->ctx;
+        kernels_ = gpu->kernels;
+        // Non-blocking: ordered only with FFmpeg's copies (which use this stream too) and our kernels,
+        // never waits for the render thread's VFX work.
+        NITID_CU(cuStreamCreate(&stream_, CU_STREAM_NON_BLOCKING));
+    }
     opts_.source_step = std::max(1, opts_.source_step);
     Ffmpeg& f = *ff_;
     int e = avformat_open_input(&f.fmt, path.c_str(), nullptr, nullptr);
@@ -114,11 +123,25 @@ FfmpegFileSource::FfmpegFileSource(const std::string& path, const OpenOptions& o
     f.dec->pkt_timebase = st->time_base;
     std::string decoder = "software";
     if (hw_codec) {
-        std::string dev = std::to_string(cuda_device);
-        if (av_hwdevice_ctx_create(&f.hw, AV_HWDEVICE_TYPE_CUDA, dev.c_str(), nullptr, 0) == 0) {
+        int ok = -1;
+        if (ctx_) {
+            // Decode into Nitid's CUDA context on our stream, so frames can be used without copies.
+            f.hw = av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_CUDA);
+            auto* cc = static_cast<AVCUDADeviceContext*>(reinterpret_cast<AVHWDeviceContext*>(f.hw->data)->hwctx);
+            cc->cuda_ctx = ctx_;
+            cc->stream = stream_;
+            ok = av_hwdevice_ctx_init(f.hw);
+            if (ok < 0) av_buffer_unref(&f.hw);
+        }
+        if (ok < 0) {
+            std::string dev = std::to_string(cuda_device);
+            ok = av_hwdevice_ctx_create(&f.hw, AV_HWDEVICE_TYPE_CUDA, dev.c_str(), nullptr, 0);
+            ctx_ = nullptr;  // FFmpeg's own context: CPU colour conversion
+        }
+        if (ok == 0) {
             f.dec->hw_device_ctx = av_buffer_ref(f.hw);
             f.dec->get_format = pick_cuda_format;
-            decoder = "NVDEC (cuda)";
+            decoder = ctx_ ? "NVDEC + GPU colour conversion" : "NVDEC (cuda)";
         } else {
             log::warn("NVDEC not available, decoding in software");
         }
@@ -147,7 +170,17 @@ FfmpegFileSource::FfmpegFileSource(const std::string& path, const OpenOptions& o
     start_thread();
 }
 
-FfmpegFileSource::~FfmpegFileSource() { stop_thread(); }
+FfmpegFileSource::~FfmpegFileSource()
+{
+    stop_thread();
+    ff_.reset();  // the decoder uses stream_: free it first
+    if (ctx_) {
+        cuCtxSetCurrent(ctx_);
+        gpu_pool_.clear();
+        thumb_dev_ = {};
+    }
+    if (stream_) cuStreamDestroy(stream_);
+}
 
 void FfmpegFileSource::start_thread()
 {
@@ -176,21 +209,95 @@ void FfmpegFileSource::restart()
 
 std::optional<DecodedFrame> FfmpegFileSource::next() { return queue_.pop(); }
 
-void FfmpegFileSource::recycle(std::vector<uint8_t>&& buffer)
+void FfmpegFileSource::recycle(DecodedFrame&& frame)
 {
     std::lock_guard l(pool_mutex_);
-    if (pool_.size() < 8) pool_.push_back(std::move(buffer));
+    if (!frame.rgba.empty() && pool_.size() < 8) pool_.push_back(std::move(frame.rgba));
+    if (frame.gpu_rgba && gpu_pool_.size() < 8) gpu_pool_.push_back(std::move(frame.gpu_rgba));
+}
+
+bool FfmpegFileSource::convert_on_gpu(AVFrame* fr, DecodedFrame& out)
+{
+    auto* frames = reinterpret_cast<AVHWFramesContext*>(fr->hw_frames_ctx->data);
+    int bytes = 0;
+    switch (frames->sw_format) {
+        case AV_PIX_FMT_NV12: bytes = 1; break;
+        case AV_PIX_FMT_P010:
+        case AV_PIX_FMT_P016: bytes = 2; break;
+        default:
+            if (!warned_format_) {
+                log::info("{} frames: colour conversion on the CPU", av_get_pix_fmt_name(frames->sw_format));
+                warned_format_ = true;
+            }
+            return false;
+    }
+    const uint32_t w = uint32_t(fr->width), h = uint32_t(fr->height);
+    const size_t bytes_rgba = size_t(w) * h * 4;
+    {
+        std::lock_guard l(pool_mutex_);
+        while (!gpu_pool_.empty() && !out.gpu_rgba) {
+            if (gpu_pool_.back().size() == bytes_rgba) out.gpu_rgba = std::move(gpu_pool_.back());
+            gpu_pool_.pop_back();
+        }
+    }
+    if (!out.gpu_rgba) out.gpu_rgba = gpu::CudaBuffer(bytes_rgba);
+
+    int cs = sws_colorspace(fr->colorspace);
+    if (cs < 0) cs = h >= 720 ? SWS_CS_ITU709 : SWS_CS_ITU601;
+    auto matrix = cs == SWS_CS_ITU709 ? gpu::ColorMatrix::Bt709 : cs == SWS_CS_BT2020 ? gpu::ColorMatrix::Bt2020 : gpu::ColorMatrix::Bt601;
+    const bool full = fr->color_range == AVCOL_RANGE_JPEG;
+    kernels_->yuv420sp_to_rgba(CUdeviceptr(fr->data[0]), size_t(fr->linesize[0]), CUdeviceptr(fr->data[1]),
+                               size_t(fr->linesize[1]), out.gpu_rgba.ptr(), size_t(w) * 4, int(w), int(h), bytes, matrix,
+                               full, stream_);
+    if (detect_cuts_) {
+        // 1/4-size luma thumbnail (4x4 averages): the only thing copied to the CPU.
+        const int tw = int((w + 3) / 4), th = int((h + 3) / 4);
+        if (thumb_dev_.size() != size_t(tw) * th) {
+            thumb_dev_ = gpu::CudaBuffer(size_t(tw) * th);
+            thumb_host_.resize(size_t(tw) * th);
+        }
+        kernels_->luma_thumbnail(CUdeviceptr(fr->data[0]), size_t(fr->linesize[0]), int(w), int(h), bytes, 4, full,
+                                 thumb_dev_.ptr(), tw, th, stream_);
+        NITID_CU(cuMemcpyDtoHAsync(thumb_host_.data(), thumb_dev_.ptr(), thumb_host_.size(), stream_));
+        NITID_CU(cuStreamSynchronize(stream_));
+        out.scene_cut = cuts_.push_luma(thumb_host_.data(), uint32_t(tw), uint32_t(th));
+    } else {
+        NITID_CU(cuStreamSynchronize(stream_));
+    }
+    out.width = w;
+    out.height = h;
+    return true;
 }
 
 void FfmpegFileSource::decode_loop()
 {
     Ffmpeg& f = *ff_;
+    if (ctx_) cuCtxSetCurrent(ctx_);
     bool eof = false;
     auto handle_frame = [&](AVFrame* fr) -> bool {
         auto t0 = SteadyClock::now();
         bool keep = (f.decoded++ % opts_.source_step) == 0;
         if (!keep) return true;
         AVFrame* src = fr;
+        if (fr->format == AV_PIX_FMT_CUDA && ctx_) {
+            DecodedFrame out;
+            bool done = false;
+            try {
+                done = convert_on_gpu(fr, out);
+            } catch (const std::exception& e) {
+                log::error("GPU colour conversion failed: {}", e.what());
+                return false;
+            }
+            if (done) {
+                out.index = f.kept++;
+                out.time_s = double(out.index) / info_.fps;
+                if (out.scene_cut)
+                    log::debug("scene cut at frame {} (histogram {:.2f}, thumbnail {:.2f})", out.index, cuts_.last_score(),
+                               cuts_.last_thumb_score());
+                out.decode_ms = ms_since(t0);
+                return queue_.push(std::move(out));
+            }
+        }
         if (fr->format == AV_PIX_FMT_CUDA) {
             av_frame_unref(f.sw);
             int e = av_hwframe_transfer_data(f.sw, fr, 0);

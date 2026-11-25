@@ -43,6 +43,32 @@ if(NOT EXISTS "${NITID_VFX_RUNTIME_DIR}/libVideoFX.so")
                   "installs it). Nitid will build, but needs NITID_VFX_DIR at run time for AI effects.")
 endif()
 
+# --- CUDA kernels (PTX, embedded) ----------------------------------------------------
+#
+# Nitid's own kernels (GPU colour conversion) are compiled to PTX by nvcc and embedded as text; the driver
+# compiles them for the installed GPU at run time. No CUDA runtime and no host-side .cu code. Without nvcc
+# the CPU colour conversion is used.
+
+set(NITID_PTX_ARCH "compute_75" CACHE STRING "Virtual GPU architecture for Nitid's PTX (compute_75 = RTX 20 and newer)")
+set(NITID_HAVE_KERNELS 0)
+if(CUDAToolkit_NVCC_EXECUTABLE AND EXISTS "${CUDAToolkit_NVCC_EXECUTABLE}")
+  set(NITID_HAVE_KERNELS 1)
+  set(_cu ${CMAKE_CURRENT_SOURCE_DIR}/src/gpu/kernels/color.cu)
+  set(_ptx ${CMAKE_CURRENT_BINARY_DIR}/kernels/color.ptx)
+  set(_hdr ${CMAKE_CURRENT_BINARY_DIR}/kernels/nitid_kernels_ptx.h)
+  add_custom_command(
+    OUTPUT ${_hdr}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/kernels
+    COMMAND ${CUDAToolkit_NVCC_EXECUTABLE} -ptx -arch=${NITID_PTX_ARCH} -O3 -o ${_ptx} ${_cu}
+    COMMAND ${CMAKE_COMMAND} -DPTX=${_ptx} -DOUT=${_hdr} -DNAME=nitid_kernels_ptx -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_ptx.cmake
+    DEPENDS ${_cu} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_ptx.cmake
+    COMMENT "Compiling Nitid CUDA kernels to PTX"
+    VERBATIM)
+  add_custom_target(nitid_kernels DEPENDS ${_hdr})
+else()
+  message(WARNING "nvcc not found: GPU colour conversion disabled (CPU fallback)")
+endif()
+
 # --- library ----------------------------------------------------------------------
 
 add_library(libnitid
@@ -55,6 +81,7 @@ add_library(libnitid
   src/gpu/vulkan_context.cpp
   src/gpu/cuda_context.cpp
   src/gpu/interop.cpp
+  src/gpu/kernels.cpp          # embedded PTX kernels (colour conversion)
   # input: frame sources (files now; screen capture and capture cards later)
   src/input/ffmpeg_file_source.cpp
   src/input/scene_cut.cpp
@@ -84,7 +111,12 @@ target_compile_options(libnitid PRIVATE -Wall -Wextra -Wno-missing-field-initial
 target_compile_definitions(libnitid PRIVATE
   NITID_VERSION_STRING="${PROJECT_VERSION}"
   NITID_VFX_DEFAULT_DIR="${NITID_VFX_RUNTIME_DIR}"
+  NITID_HAVE_KERNELS=${NITID_HAVE_KERNELS}
 )
+if(NITID_HAVE_KERNELS)
+  add_dependencies(libnitid nitid_kernels)
+  target_include_directories(libnitid PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/kernels)
+endif()
 
 target_include_directories(libnitid PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src

@@ -122,15 +122,20 @@ void Pipeline::configure(Size box, const Settings& settings)
 
 void Pipeline::upload(input::DecodedFrame& f, Slot& dst)
 {
-    const size_t bytes = f.rgba.size();
+    const size_t bytes = size_t(f.width) * f.height * 4;
+    // GPU frames: a device copy (~0.02 ms at 1080p). CPU frames: an upload.
+    auto copy_in = [&](CUdeviceptr to) {
+        if (f.gpu_rgba) NITID_CU(cuMemcpyDtoDAsync(to, f.gpu_rgba.ptr(), bytes, cuda_.stream));
+        else NITID_CU(cuMemcpyHtoDAsync(to, f.rgba.data(), bytes, cuda_.stream));
+    };
     if (sr_active_) {
-        timed(upload_ms_, [&] { NITID_CU(cuMemcpyHtoDAsync(upload_.ptr(), f.rgba.data(), bytes, cuda_.stream)); });
+        timed(upload_ms_, [&] { copy_in(upload_.ptr()); });
         timed(upscale_ms_, [&] {
             sr_->run();
             NITID_CU(cuMemcpyDtoDAsync(dst.buf.ptr(), sr_->output(), size_t(work_.w) * work_.h * 4, cuda_.stream));
         });
     } else {
-        timed(upload_ms_, [&] { NITID_CU(cuMemcpyHtoDAsync(dst.buf.ptr(), f.rgba.data(), bytes, cuda_.stream)); });
+        timed(upload_ms_, [&] { copy_in(dst.buf.ptr()); });
     }
 }
 
@@ -146,7 +151,7 @@ bool Pipeline::fetch_next(int64_t min_index)
             // Already in the past (playback fell behind): never shown, so don't spend GPU time on it.
             ++skipped_;
             pending_cut_ = cut;
-            source_->recycle(std::move(f->rgba));
+            source_->recycle(std::move(*f));
             continue;
         }
         pending_cut_ = false;
@@ -154,7 +159,7 @@ bool Pipeline::fetch_next(int64_t min_index)
         upload(*f, dst);
         dst.index = f->index;
         dst.scene_cut = cut;
-        source_->recycle(std::move(f->rgba));
+        source_->recycle(std::move(*f));
         return true;
     }
 }

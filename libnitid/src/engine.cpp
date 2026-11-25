@@ -4,6 +4,7 @@
 #include "core/log.hpp"
 #include "core/running_average.hpp"
 #include "gpu/cuda_context.hpp"
+#include "gpu/kernels.hpp"
 #include "gpu/vulkan_context.hpp"
 #include "input/ffmpeg_file_source.hpp"
 #include "output/swapchain_presenter.hpp"
@@ -24,6 +25,7 @@ struct Engine::Impl {
     std::unique_ptr<gpu::VulkanContext> vk;
     std::unique_ptr<gpu::CudaContext> cuda;
     std::shared_ptr<const vfx::Api> vfx;
+    std::unique_ptr<gpu::Kernels> kernels;
 
     std::unique_ptr<output::SwapchainPresenter> presenter;
     std::unique_ptr<input::FfmpegFileSource> source;
@@ -108,6 +110,7 @@ Engine::~Engine()
     impl_->pipe.reset();
     impl_->source.reset();
     impl_->presenter.reset();
+    impl_->kernels.reset();
     impl_->cuda.reset();
     impl_->vk.reset();
 }
@@ -119,6 +122,7 @@ std::unique_ptr<Engine> Engine::create(const EngineOptions& options)
     m.options = options;
     m.vk = std::make_unique<gpu::VulkanContext>(options.instance_extensions, options.validation);
     m.cuda = std::make_unique<gpu::CudaContext>(m.vk->device_uuid);
+    m.kernels = std::make_unique<gpu::Kernels>();
     m.caps.gpu_name = m.vk->props.deviceName;
     m.caps.driver_version = m.vk->driver_version();
     m.probe_effects();
@@ -134,7 +138,8 @@ SourceInfo Engine::open_file(const std::string& path, const OpenOptions& options
     m.ensure_device(VK_NULL_HANDLE);
     close_source();
     m.open_options = options;
-    m.source = std::make_unique<input::FfmpegFileSource>(path, options, int(m.cuda->device));
+    input::GpuDecode gd{m.cuda->ctx, m.kernels.get()};
+    m.source = std::make_unique<input::FfmpegFileSource>(path, options, int(m.cuda->device), &gd);
     m.source->set_scene_cut_detection(m.settings.scene_cut_detection);
     m.pipe = std::make_unique<pipeline::Pipeline>(*m.cuda, m.vfx, m.caps.super_res, m.caps.frame_gen);
     m.pipe->set_source(m.source.get());
