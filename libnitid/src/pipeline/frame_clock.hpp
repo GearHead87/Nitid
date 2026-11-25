@@ -5,6 +5,7 @@
 // Position is measured in source frames (2.25 = a quarter of the way from frame 2 to frame 3).
 // Display output advances by one refresh per call (and by whole missed refreshes after a stall), so
 // generated frames land exactly on the refresh grid (spike S7: FIFO pacing is steady to +-0.03 ms).
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 
@@ -29,10 +30,15 @@ class DisplayClock {
 public:
     static constexpr double kMaxCatchUpS = 0.25;
 
-    void reset() { media_s_ = 0, started_ = false; }
+    void reset() { media_s_ = 0, debt_s_ = 0, started_ = false; }
 
     // Call once per display refresh. Returns the media time (seconds) for this refresh.
-    double tick(double now_s, double refresh_period_s, bool paused)
+    //
+    // Media time moves in whole refreshes, so generated frames land on the refresh grid, and follows the
+    // wall clock on average: a frame that took 1.4 refreshes adds 1, the leftover 0.4 is carried to the
+    // next one (no slow motion when the GPU can't keep up every refresh). After a long stall (loading a
+    // model, dragging the window) it carries on from where it was instead of jumping ahead.
+    double tick(double now_s, double period_s, bool paused)
     {
         if (!started_) {
             started_ = true;
@@ -42,18 +48,18 @@ public:
         double elapsed = now_s - last_now_;
         last_now_ = now_s;
         if (paused) return media_s_;
-        // Normally exactly one refresh; after a short stall, the refreshes that really passed (keeps time);
-        // after a long one (loading, window drag) carry on where we were instead of jumping ahead.
-        double refreshes = 1.0;
-        if (elapsed > 1.5 * refresh_period_s && elapsed < kMaxCatchUpS) refreshes = std::round(elapsed / refresh_period_s);
-        media_s_ += refreshes * refresh_period_s;
+        if (elapsed > kMaxCatchUpS) elapsed = period_s;
+        debt_s_ += elapsed;
+        double refreshes = std::max(1.0, std::floor(debt_s_ / period_s + 0.5));
+        debt_s_ -= refreshes * period_s;
+        media_s_ += refreshes * period_s;
         return media_s_;
     }
 
     double media_s() const { return media_s_; }
 
 private:
-    double media_s_ = 0, last_now_ = 0;
+    double media_s_ = 0, last_now_ = 0, debt_s_ = 0;
     bool started_ = false;
 };
 

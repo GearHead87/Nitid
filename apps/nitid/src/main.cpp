@@ -7,6 +7,7 @@
 
 #include <CLI/CLI.hpp>
 
+#include <algorithm>
 #include <map>
 #include <print>
 
@@ -34,10 +35,13 @@ int main(int argc, char** argv)
     cli.add_option("--height", o.height, "Window height in pixels (with --width)");
     cli.add_flag("--loop", o.open.loop, "Play again from the start at the end");
     cli.add_flag("!--sw-decode", o.open.hw_decode, "Decode in software instead of NVDEC");
+    cli.add_option("--source-step", o.open.source_step,
+                   "Use only every Nth frame of the file (tests: frame gen rebuilds the dropped ones)")
+        ->check(CLI::Range(1, 16));
     cli.add_option("--quit-after", o.quit_after_s, "Close after this many seconds and print a report (for tests)");
     cli.add_flag("--stats", o.print_stats, "Print a stats line every second");
     cli.add_flag("--validation", o.validation, "Enable Vulkan validation layers");
-    cli.add_option("--capture-at", o.capture_at, "Save the window image at these playback times in seconds (tests)")
+    cli.add_option("--capture-at", o.capture_at, "Save the window image at these playback times in seconds, then quit (tests)")
         ->expected(1, -1);
     cli.add_option("--capture-prefix", o.capture_prefix, "File name prefix for --capture-at images");
     CLI11_PARSE(cli, argc, argv);
@@ -54,6 +58,7 @@ int main(int argc, char** argv)
     if (frame_gen != "off") o.settings.frame_gen_quality = fg.at(frame_gen);
     o.settings.frame_gen_multiplier = multiplier;
 
+    std::sort(o.capture_at.begin(), o.capture_at.end());
     try {
         nitid_app::App app(std::move(o));
         return app.run();

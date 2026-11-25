@@ -17,8 +17,11 @@ play() {
 field() { grep -oP "$1" "$log" | tail -1; }
 
 # psnr <a> <b> : PSNR (dB) between two images or videos (RGB)
-psnr() { ffmpeg -hide_banner -nostdin -i "$1" -i "$2" -lavfi "[0]format=rgb24[a];[1]format=rgb24[b];[a][b]psnr" -f null - 2>&1 \
-  | grep -oE 'average:[0-9.inf]+' | cut -d: -f2; }
+psnr() {
+  [ -f "$1" ] && [ -f "$2" ] || { echo "missing"; return 0; }
+  ffmpeg -hide_banner -nostdin -i "$1" -i "$2" -lavfi "[0]format=rgb24[a];[1]format=rgb24[b];[a][b]psnr" -f null - 2>&1 \
+    | grep -oE 'average:[0-9.inf]+' | cut -d: -f2
+}
 
 # frame <video> <index> <out.ppm> [scale WxH] : one decoded frame (optionally Lanczos-scaled)
 frame() {

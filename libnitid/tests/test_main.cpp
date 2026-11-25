@@ -100,6 +100,17 @@ void test_clock()
     t += period;
     c.tick(t, period, true);
     CHECK(c.media_s() == m);
+    // Sustained slow frames (1.4 refreshes each): media time keeps up with the wall clock, in whole refreshes.
+    DisplayClock slow;
+    double ts = 0;
+    slow.tick(ts, period, false);
+    for (int i = 0; i < 100; ++i) {
+        ts += 1.4 * period;
+        double m2 = slow.tick(ts, period, false);
+        double r = m2 / period;
+        CHECK(near(r, std::round(r), 1e-6));  // always on the refresh grid
+    }
+    CHECK(std::fabs(slow.media_s() - ts) <= period);
     // 24 fps film at 165 Hz with frame gen: position advances 24/165 frames per refresh.
     DisplayClock d;
     d.tick(0, period, false);

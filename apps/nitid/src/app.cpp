@@ -109,6 +109,9 @@ int App::run()
     auto t_start = clock_type::now();
     auto t_title = t_start, t_stats = t_start;
     bool ended = false;
+    bool first_frame = true;
+    const bool captures_requested = !opts_.capture_at.empty();
+    int frames_after_capture = 0;
     while (running_) {
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
@@ -124,7 +127,7 @@ int App::run()
             }
         }
         if (!running_) break;
-        if (!opts_.capture_at.empty() && engine_->stats().position_s >= opts_.capture_at.front()) {
+        if (!opts_.capture_at.empty() && !first_frame && engine_->stats().position_s >= opts_.capture_at.front()) {
             engine_->capture_next_window_frame(std::format("{}_{:.2f}s.ppm", opts_.capture_prefix, opts_.capture_at.front()));
             opts_.capture_at.erase(opts_.capture_at.begin());
         }
@@ -132,6 +135,11 @@ int App::run()
             ended = true;
             break;
         }
+        if (first_frame) {
+            first_frame = false;
+            std::println("First frame on screen {:.2f} s after opening (includes loading the AI models)", seconds_since(t_start));
+        }
+        if (captures_requested && opts_.capture_at.empty() && ++frames_after_capture > 2) break;  // test run done
         if (seconds_since(t_title) > 0.5) {
             update_title();
             t_title = clock_type::now();
