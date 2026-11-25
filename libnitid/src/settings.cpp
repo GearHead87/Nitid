@@ -42,4 +42,35 @@ std::string_view to_string(FrameGenQuality q) noexcept
     return "?";
 }
 
+bool parse_upscaling(std::string_view name, Settings& s) noexcept
+{
+    if (name == "off") {
+        s.upscaler = Upscaler::Off;
+        return true;
+    }
+    for (auto q : {SuperResQuality::Bicubic, SuperResQuality::Low, SuperResQuality::Medium, SuperResQuality::High,
+                   SuperResQuality::Ultra})
+        if (name == to_string(q)) {
+            s.upscaler = Upscaler::VfxSuperRes;
+            s.super_res_quality = q;
+            return true;
+        }
+    return false;
+}
+
+bool parse_frame_gen(std::string_view name, Settings& s) noexcept
+{
+    if (name == "off") {
+        s.frame_gen = FrameGen::Off;
+        return true;
+    }
+    for (auto q : {FrameGenQuality::Low, FrameGenQuality::Medium, FrameGenQuality::High})
+        if (name == to_string(q)) {
+            s.frame_gen = FrameGen::VfxFrameGen;
+            s.frame_gen_quality = q;
+            return true;
+        }
+    return false;
+}
+
 } // namespace nitid

@@ -48,4 +48,11 @@ NITID_EXPORT std::string_view to_string(SuperResQuality) noexcept;
 NITID_EXPORT std::string_view to_string(FrameGen) noexcept;
 NITID_EXPORT std::string_view to_string(FrameGenQuality) noexcept;
 
+// Parse the names apps use on the command line and in presets. nullopt if unknown.
+//   upscaling:        "off", "bicubic", "low", "medium", "high", "ultra"
+//   frame generation: "off", "low", "medium", "high"
+// Sets both the on/off choice and the quality in `s`. Returns false if the name is unknown.
+NITID_EXPORT bool parse_upscaling(std::string_view name, Settings& s) noexcept;
+NITID_EXPORT bool parse_frame_gen(std::string_view name, Settings& s) noexcept;
+
 } // namespace nitid

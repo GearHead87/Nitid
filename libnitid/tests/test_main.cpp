@@ -154,6 +154,25 @@ void test_scene_cut()
     auto c = solid(w, h, 10, 10, 10);
     CHECK(d.push(c.data(), w, h));
     CHECK(d.last_score() > 0.9f);
+    // A fade (brightness ramps a little every frame) is not a cut, even when each step is large-ish.
+    input::SceneCutDetector f;
+    for (int i = 0; i <= 12; ++i) {
+        uint8_t v = uint8_t(i * 20);
+        auto fr = solid(w, h, v, v, v);
+        bool cut = f.push(fr.data(), w, h);
+        if (i >= 2) CHECK(!cut);
+    }
+    // Two shots with the same brightness histogram but different layout: caught by the thumbnail measure.
+    input::SceneCutDetector g;
+    auto left_bright = gradient(w, h, 0);         // dark -> bright, left to right
+    std::vector<uint8_t> mirrored(left_bright.size());
+    for (uint32_t y = 0; y < h; ++y)
+        for (uint32_t x = 0; x < w; ++x)
+            for (int c = 0; c < 4; ++c) mirrored[(size_t(y) * w + x) * 4 + c] = left_bright[(size_t(y) * w + (w - 1 - x)) * 4 + c];
+    CHECK(!g.push(left_bright.data(), w, h));
+    CHECK(!g.push(left_bright.data(), w, h));
+    CHECK(g.push(mirrored.data(), w, h));
+    CHECK(g.last_score() < g.hist_threshold);  // the histogram measure alone would have missed it
     // Reset: next frame is a first frame again.
     d.reset();
     CHECK(!d.push(a.data(), w, h));

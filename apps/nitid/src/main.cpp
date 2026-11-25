@@ -8,7 +8,6 @@
 #include <CLI/CLI.hpp>
 
 #include <algorithm>
-#include <map>
 #include <print>
 
 int main(int argc, char** argv)
@@ -46,16 +45,8 @@ int main(int argc, char** argv)
     cli.add_option("--capture-prefix", o.capture_prefix, "File name prefix for --capture-at images");
     CLI11_PARSE(cli, argc, argv);
 
-    static const std::map<std::string, SuperResQuality> sr = {{"low", SuperResQuality::Low},
-                                                              {"medium", SuperResQuality::Medium},
-                                                              {"high", SuperResQuality::High},
-                                                              {"ultra", SuperResQuality::Ultra}};
-    static const std::map<std::string, FrameGenQuality> fg = {
-        {"low", FrameGenQuality::Low}, {"medium", FrameGenQuality::Medium}, {"high", FrameGenQuality::High}};
-    o.settings.upscaler = upscale == "off" ? Upscaler::Off : Upscaler::VfxSuperRes;
-    if (upscale != "off") o.settings.super_res_quality = sr.at(upscale);
-    o.settings.frame_gen = frame_gen == "off" ? FrameGen::Off : FrameGen::VfxFrameGen;
-    if (frame_gen != "off") o.settings.frame_gen_quality = fg.at(frame_gen);
+    parse_upscaling(upscale, o.settings);  // names already checked by CLI11
+    parse_frame_gen(frame_gen, o.settings);
     o.settings.frame_gen_multiplier = multiplier;
 
     std::sort(o.capture_at.begin(), o.capture_at.end());

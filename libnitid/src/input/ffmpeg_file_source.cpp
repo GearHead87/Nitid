@@ -243,7 +243,9 @@ void FfmpegFileSource::decode_loop()
         out.index = f.kept++;
         out.time_s = double(out.index) / info_.fps;
         out.scene_cut = detect_cuts_ && cuts_.push(out.rgba.data(), out.width, out.height);
-        if (out.scene_cut) log::debug("scene cut at frame {} (score {:.2f})", out.index, cuts_.last_score());
+        if (out.scene_cut)
+            log::debug("scene cut at frame {} (histogram {:.2f}, thumbnail {:.2f})", out.index, cuts_.last_score(),
+                       cuts_.last_thumb_score());
         out.decode_ms = ms_since(t0);
         return queue_.push(std::move(out));
     };
