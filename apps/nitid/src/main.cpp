@@ -21,11 +21,14 @@ int main(int argc, char** argv)
     CLI::App cli{"Nitid: AI upscaling and frame generation for video (NVIDIA RTX, Linux)", "nitid"};
     cli.set_version_flag("--version", std::string(nitid::version()));
     cli.add_option("file", o.file, "Video file to play")->required()->check(CLI::ExistingFile);
-    cli.add_option("--upscale", upscale, "AI upscaling: off, low, medium, high, ultra")
-        ->check(CLI::IsMember({"off", "low", "medium", "high", "ultra"}))
+    cli.add_option("--upscale", upscale, "Upscaling: VSR (AI) quality low, medium, high, ultra; fsr; nis; off")
+        ->check(CLI::IsMember({"off", "low", "medium", "high", "ultra", "fsr", "nis"}))
         ->capture_default_str();
     cli.add_option("--frame-gen", frame_gen, "Frame generation: off, low, medium, high")
         ->check(CLI::IsMember({"off", "low", "medium", "high"}))
+        ->capture_default_str();
+    cli.add_option("--sharpness", o.settings.sharpness, "FSR / NIS sharpening, 0 to 1")
+        ->check(CLI::Range(0.0f, 1.0f))
         ->capture_default_str();
     cli.add_option("--multiplier", multiplier, "Frame gen multiplier: 2, 3, 4, or 0 = one frame per display refresh")
         ->check(CLI::Range(0, 8))

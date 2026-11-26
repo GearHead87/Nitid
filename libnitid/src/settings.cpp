@@ -7,6 +7,8 @@ std::string_view to_string(Upscaler u) noexcept
     switch (u) {
         case Upscaler::Off: return "off";
         case Upscaler::VfxSuperRes: return "VFX VSR";
+        case Upscaler::Fsr1: return "FSR 1";
+        case Upscaler::Nis: return "NIS";
     }
     return "?";
 }
@@ -42,10 +44,29 @@ std::string_view to_string(FrameGenQuality q) noexcept
     return "?";
 }
 
+std::string upscaling_name(const Settings& s)
+{
+    switch (s.upscaler) {
+        case Upscaler::Off: return "off";
+        case Upscaler::VfxSuperRes: return "VSR " + std::string(to_string(s.super_res_quality));
+        case Upscaler::Fsr1:
+        case Upscaler::Nis: return std::string(to_string(s.upscaler));
+    }
+    return "?";
+}
+
 bool parse_upscaling(std::string_view name, Settings& s) noexcept
 {
     if (name == "off") {
         s.upscaler = Upscaler::Off;
+        return true;
+    }
+    if (name == "fsr") {
+        s.upscaler = Upscaler::Fsr1;
+        return true;
+    }
+    if (name == "nis") {
+        s.upscaler = Upscaler::Nis;
         return true;
     }
     for (auto q : {SuperResQuality::Bicubic, SuperResQuality::Low, SuperResQuality::Medium, SuperResQuality::High,

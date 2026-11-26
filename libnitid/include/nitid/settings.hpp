@@ -3,6 +3,7 @@
 #include <nitid/export.hpp>
 
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 namespace nitid {
@@ -10,7 +11,9 @@ namespace nitid {
 // How the video is scaled to the output size.
 enum class Upscaler : std::uint8_t {
     Off,          // no AI upscaling; the frame is scaled to the window with a plain bilinear blit
-    VfxSuperRes,  // NVIDIA VFX Video Super Resolution
+    VfxSuperRes,  // NVIDIA VFX Video Super Resolution (AI; RTX GPUs with the VFX runtime)
+    Fsr1,         // AMD FidelityFX FSR 1 (EASU + RCAS sharpening): spatial, any NVIDIA GPU
+    Nis,          // NVIDIA Image Scaling: spatial, up to 2x (larger windows: the rest is a plain blit)
 };
 
 // VFX Video Super Resolution quality levels (values match the SDK's QualityLevel).
@@ -29,6 +32,8 @@ enum class FrameGenQuality : std::uint8_t { Low = 0, Medium = 1, High = 2 };
 struct Settings {
     Upscaler upscaler = Upscaler::VfxSuperRes;
     SuperResQuality super_res_quality = SuperResQuality::High;
+    // FSR 1 / NIS sharpening, 0 (none) to 1 (strongest).
+    float sharpness = 0.5f;
 
     FrameGen frame_gen = FrameGen::VfxFrameGen;
     FrameGenQuality frame_gen_quality = FrameGenQuality::Medium;
@@ -48,8 +53,11 @@ NITID_EXPORT std::string_view to_string(SuperResQuality) noexcept;
 NITID_EXPORT std::string_view to_string(FrameGen) noexcept;
 NITID_EXPORT std::string_view to_string(FrameGenQuality) noexcept;
 
-// Parse the names apps use on the command line and in presets. nullopt if unknown.
-//   upscaling:        "off", "bicubic", "low", "medium", "high", "ultra"
+// Short description of the chosen upscaler, e.g. "VSR high", "FSR 1", "NIS", "off".
+NITID_EXPORT std::string upscaling_name(const Settings& s);
+
+// Parse the names apps use on the command line and in presets.
+//   upscaling:        "off", "fsr", "nis", or VSR quality "bicubic", "low", "medium", "high", "ultra"
 //   frame generation: "off", "low", "medium", "high"
 // Sets both the on/off choice and the quality in `s`. Returns false if the name is unknown.
 NITID_EXPORT bool parse_upscaling(std::string_view name, Settings& s) noexcept;

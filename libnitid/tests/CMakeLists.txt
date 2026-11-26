@@ -3,8 +3,11 @@
 add_executable(nitid-unit-tests
   test_main.cpp
   ${PROJECT_SOURCE_DIR}/src/input/scene_cut.cpp
+  ${PROJECT_SOURCE_DIR}/src/settings.cpp
 )
-target_include_directories(nitid-unit-tests PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/include)
+target_include_directories(nitid-unit-tests PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/include
+  ${PROJECT_BINARY_DIR}/include)  # generated nitid/export.hpp
+target_compile_definitions(nitid-unit-tests PRIVATE NITID_STATIC_DEFINE)
 target_compile_features(nitid-unit-tests PRIVATE cxx_std_23)
 target_compile_options(nitid-unit-tests PRIVATE -Wall -Wextra)
 target_link_libraries(nitid-unit-tests PRIVATE Threads::Threads)

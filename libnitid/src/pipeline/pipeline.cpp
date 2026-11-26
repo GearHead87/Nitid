@@ -16,6 +16,7 @@ Pipeline::Pipeline(gpu::CudaContext& cuda, std::shared_ptr<const vfx::Api> vfx, 
         sr_ = std::make_unique<vfx::SuperRes>(vfx_, cuda_.stream);
         fg_ = std::make_unique<vfx::FrameGen>(vfx_, cuda_.stream);
     }
+    spatial_ = std::make_unique<gpu::SpatialScaler>();
 }
 
 Pipeline::~Pipeline() { cuda_.sync(); }
@@ -65,15 +66,19 @@ void Pipeline::configure(Size box, const Settings& settings)
     settings_ = settings;
 
     // Upscaler: active only if wanted, available, and the frame actually gets bigger.
-    Size target = upscale_target(src_, box);
-    bool want_sr = settings.upscaler == Upscaler::VfxSuperRes;
-    sr_active_ = false;
+    const bool spatial = settings.upscaler == Upscaler::Fsr1 || settings.upscaler == Upscaler::Nis;
+    const double max_scale = settings.upscaler == Upscaler::Nis ? gpu::SpatialScaler::kNisMaxScale : 4.0;
+    Size target = upscale_target(src_, box, max_scale);
+    up_ = Up::None;
     sr_note_.clear();
-    if (!want_sr) sr_note_ = "off";
+    if (settings.upscaler == Upscaler::Off) sr_note_ = "off";
+    else if (target == src_) sr_note_ = "no upscale needed (window not larger than the video)";
+    else if (spatial && !spatial_->available()) sr_note_ = "FSR / NIS kernels not in this build";
+    else if (spatial) up_ = Up::Spatial;
     else if (!can_sr_) sr_note_ = "VFX runtime not available";
     else if (sr_failed_) sr_note_ = "failed to load (see log)";
-    else if (target == src_) sr_note_ = "no upscale needed (window not larger than the video)";
-    else sr_active_ = true;
+    else up_ = Up::Vsr;
+    sr_active_ = up_ != Up::None;
 
     Size work = sr_active_ ? target : src_;
     bool ring_changed = !(work == work_);
@@ -82,15 +87,14 @@ void Pipeline::configure(Size box, const Settings& settings)
         work_ = work;
         allocate_ring();
     }
-    if (sr_active_) {
+    if (sr_active_ && (!upload_ || upload_.size() != size_t(src_.w) * src_.h * 4))
+        upload_ = gpu::CudaBuffer(size_t(src_.w) * src_.h * 4);
+    if (up_ == Up::Vsr) {
         try {
-            if (!upload_ || upload_.size() != size_t(src_.w) * src_.h * 4) upload_ = gpu::CudaBuffer(size_t(src_.w) * src_.h * 4);
             sr_->configure(upload_.ptr(), src_.w, src_.h, work_.w, work_.h, unsigned(settings.super_res_quality));
         } catch (const Error& e) {
             log::error("{}", e.what());
             sr_failed_ = true;
-            sr_active_ = false;
-            sr_note_ = "failed to load (see log)";
             box_ = {};  // reconfigure without VSR
             configure(box, settings);
             return;
@@ -98,6 +102,9 @@ void Pipeline::configure(Size box, const Settings& settings)
     } else if (sr_ && sr_->configured()) {
         sr_->reset();  // free the model's memory
     }
+    if (up_ == Up::Spatial)
+        spatial_->configure(settings.upscaler == Upscaler::Nis ? gpu::SpatialKind::Nis : gpu::SpatialKind::Fsr1, src_.w,
+                            src_.h, work_.w, work_.h, settings.sharpness);
 
     // Frame generation.
     fg_active_ = false;
@@ -116,8 +123,8 @@ void Pipeline::configure(Size box, const Settings& settings)
         }
     }
     if (!fg_active_ && fg_ && fg_->configured()) fg_->reset();
-    log::info("Pipeline: source {}x{} -> work {}x{} (VSR {}, frame gen {})", src_.w, src_.h, work_.w, work_.h,
-              sr_active_ ? "on" : sr_note_, fg_active_ ? "on" : fg_note_);
+    log::info("Pipeline: source {}x{} -> work {}x{} (upscaler {}, frame gen {})", src_.w, src_.h, work_.w, work_.h,
+              sr_active_ ? upscaling_name(settings) : sr_note_, fg_active_ ? "on" : fg_note_);
 }
 
 void Pipeline::upload(input::DecodedFrame& f, Slot& dst)
@@ -128,12 +135,20 @@ void Pipeline::upload(input::DecodedFrame& f, Slot& dst)
         if (f.gpu_rgba) NITID_CU(cuMemcpyDtoDAsync(to, f.gpu_rgba.ptr(), bytes, cuda_.stream));
         else NITID_CU(cuMemcpyHtoDAsync(to, f.rgba.data(), bytes, cuda_.stream));
     };
-    if (sr_active_) {
+    if (up_ == Up::Vsr) {
         timed(upload_ms_, [&] { copy_in(upload_.ptr()); });
         timed(upscale_ms_, [&] {
             sr_->run();
             NITID_CU(cuMemcpyDtoDAsync(dst.buf.ptr(), sr_->output(), size_t(work_.w) * work_.h * 4, cuda_.stream));
         });
+    } else if (up_ == Up::Spatial) {
+        // GPU frames are read in place; CPU frames are uploaded first.
+        CUdeviceptr in = f.gpu_rgba.ptr();
+        if (!f.gpu_rgba) {
+            timed(upload_ms_, [&] { copy_in(upload_.ptr()); });
+            in = upload_.ptr();
+        }
+        timed(upscale_ms_, [&] { spatial_->run(in, dst.buf.ptr(), cuda_.stream); });
     } else {
         timed(upload_ms_, [&] { copy_in(dst.buf.ptr()); });
     }

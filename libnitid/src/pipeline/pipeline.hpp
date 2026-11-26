@@ -2,12 +2,13 @@
 
 // The processing chain, independent of where frames come from and where they go:
 //
-//   FrameSource --upload--> [VFX VSR] --> two-frame ring (current, next) --> [VFX frame gen] --> output
+//   FrameSource --upload--> [upscaler: VFX VSR, FSR 1 or NIS] --> two-frame ring (current, next) --> [VFX frame gen] --> output
 //
 // produce(position) returns a GPU pointer to the RGBA8 frame for that moment: a real frame, or one
 // generated between `current` and `next`. Callers (window presenter, headless runner) copy it out.
 #include "core/running_average.hpp"
 #include "gpu/cuda_context.hpp"
+#include "gpu/spatial_scaler.hpp"
 #include "input/frame_source.hpp"
 #include "pipeline/frame_layout.hpp"
 #include "vfx/frame_gen.hpp"
@@ -66,11 +67,14 @@ private:
 
     Settings settings_;
     Size box_, src_, work_;
-    bool sr_active_ = false, fg_active_ = false;
+    enum class Up { None, Vsr, Spatial };
+    Up up_ = Up::None;  // upscaler actually running
+    bool sr_active_ = false, fg_active_ = false;  // sr_active_: any upscaler running
     bool sr_failed_ = false, fg_failed_ = false;
     std::string sr_note_, fg_note_;
 
     std::unique_ptr<vfx::SuperRes> sr_;
+    std::unique_ptr<gpu::SpatialScaler> spatial_;
     std::unique_ptr<vfx::FrameGen> fg_;
     gpu::CudaBuffer upload_;  // source-size frame (VSR input)
     Slot slots_[2];

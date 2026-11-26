@@ -169,8 +169,11 @@ void App::handle(Action a)
             fullscreen_ = !fullscreen_;
             SDL_SetWindowFullscreen(window_, fullscreen_);
             break;
-        case Action::ToggleUpscaler:
-            settings_.upscaler = settings_.upscaler == Upscaler::Off ? Upscaler::VfxSuperRes : Upscaler::Off;
+        case Action::CycleUpscaler:
+            settings_.upscaler = settings_.upscaler == Upscaler::VfxSuperRes ? Upscaler::Fsr1
+                                 : settings_.upscaler == Upscaler::Fsr1      ? Upscaler::Nis
+                                 : settings_.upscaler == Upscaler::Nis       ? Upscaler::Off
+                                                                             : Upscaler::VfxSuperRes;
             break;
         case Action::CycleUpscalerQuality: {
             int q = int(settings_.super_res_quality) + 1;

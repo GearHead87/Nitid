@@ -13,8 +13,8 @@ std::string multiplier_text(const nitid::Settings& s)
 
 std::string upscaler_text(const nitid::Settings& s, const nitid::Stats& st)
 {
-    if (st.upscaler_active) return std::format("VSR {} {:.2f} ms", nitid::to_string(s.super_res_quality), st.avg.upscale_ms);
-    return std::format("VSR off ({})", st.upscaler_note);
+    if (st.upscaler_active) return std::format("{} {:.2f} ms", nitid::upscaling_name(s), st.avg.upscale_ms);
+    return std::format("upscaling off ({})", st.upscaler_note);
 }
 
 std::string frame_gen_text(const nitid::Settings& s, const nitid::Stats& st)

@@ -54,18 +54,26 @@ set(NITID_PTX_ARCH "compute_75" CACHE STRING "Virtual GPU architecture for Nitid
 set(NITID_HAVE_KERNELS 0)
 if(CUDAToolkit_NVCC_EXECUTABLE AND EXISTS "${CUDAToolkit_NVCC_EXECUTABLE}")
   set(NITID_HAVE_KERNELS 1)
-  set(_cu ${CMAKE_CURRENT_SOURCE_DIR}/src/gpu/kernels/color.cu)
-  set(_ptx ${CMAKE_CURRENT_BINARY_DIR}/kernels/color.ptx)
-  set(_hdr ${CMAKE_CURRENT_BINARY_DIR}/kernels/nitid_kernels_ptx.h)
-  add_custom_command(
-    OUTPUT ${_hdr}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/kernels
-    COMMAND ${CUDAToolkit_NVCC_EXECUTABLE} -ptx -arch=${NITID_PTX_ARCH} -O3 -o ${_ptx} ${_cu}
-    COMMAND ${CMAKE_COMMAND} -DPTX=${_ptx} -DOUT=${_hdr} -DNAME=nitid_kernels_ptx -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_ptx.cmake
-    DEPENDS ${_cu} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_ptx.cmake
-    COMMENT "Compiling Nitid CUDA kernels to PTX"
-    VERBATIM)
-  add_custom_target(nitid_kernels DEPENDS ${_hdr})
+  # One PTX module per .cu file, embedded as <symbol>[] in <symbol>.h:
+  #   color.cu -> nitid_kernels_ptx (colour conversion), scale.cu -> nitid_scale_ptx (FSR 1, NIS)
+  set(_headers)
+  foreach(_pair "color;nitid_kernels_ptx" "scale;nitid_scale_ptx")
+    list(GET _pair 0 _name)
+    list(GET _pair 1 _sym)
+    set(_cu ${CMAKE_CURRENT_SOURCE_DIR}/src/gpu/kernels/${_name}.cu)
+    set(_ptx ${CMAKE_CURRENT_BINARY_DIR}/kernels/${_name}.ptx)
+    set(_hdr ${CMAKE_CURRENT_BINARY_DIR}/kernels/${_sym}.h)
+    add_custom_command(
+      OUTPUT ${_hdr}
+      COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/kernels
+      COMMAND ${CUDAToolkit_NVCC_EXECUTABLE} -ptx -arch=${NITID_PTX_ARCH} -O3 -o ${_ptx} ${_cu}
+      COMMAND ${CMAKE_COMMAND} -DPTX=${_ptx} -DOUT=${_hdr} -DNAME=${_sym} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_ptx.cmake
+      DEPENDS ${_cu} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_ptx.cmake
+      COMMENT "Compiling Nitid CUDA kernels to PTX (${_name}.cu)"
+      VERBATIM)
+    list(APPEND _headers ${_hdr})
+  endforeach()
+  add_custom_target(nitid_kernels DEPENDS ${_headers})
 else()
   message(WARNING "nvcc not found: GPU colour conversion disabled (CPU fallback)")
 endif()
@@ -83,6 +91,7 @@ add_library(libnitid
   src/gpu/cuda_context.cpp
   src/gpu/interop.cpp
   src/gpu/kernels.cpp          # embedded PTX kernels (colour conversion)
+  src/gpu/spatial_scaler.cpp   # FSR 1 / NIS upscaling (embedded PTX)
   # input: frame sources (files now; screen capture and capture cards later)
   src/input/ffmpeg_file_source.cpp
   src/input/scene_cut.cpp
@@ -125,6 +134,7 @@ target_include_directories(libnitid PRIVATE
 )
 target_include_directories(libnitid SYSTEM PRIVATE
   ${NITID_VFX_INCLUDE_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/nis   # NIS_Config.h (MIT)
 )
 
 target_link_libraries(libnitid
@@ -157,6 +167,9 @@ install(TARGETS libnitid
 install(DIRECTORY include/ ${CMAKE_CURRENT_BINARY_DIR}/include/
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
+
+install(FILES third_party/nis/LICENSE.txt DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/nitid/licenses/NIS)
+install(FILES third_party/fsr1/LICENSE.txt DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/nitid/licenses/FSR1)
 
 install(EXPORT libnitidTargets
   NAMESPACE nitid::

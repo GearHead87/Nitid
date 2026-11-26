@@ -14,7 +14,7 @@ enum class Action {
     Quit,
     TogglePause,
     ToggleFullscreen,
-    ToggleUpscaler,
+    CycleUpscaler,
     CycleUpscalerQuality,
     ToggleFrameGen,
     CycleFrameGenQuality,

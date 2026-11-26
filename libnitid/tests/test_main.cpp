@@ -5,6 +5,8 @@
 #include "pipeline/frame_clock.hpp"
 #include "pipeline/frame_layout.hpp"
 
+#include <nitid/settings.hpp>
+
 #include <cmath>
 #include <cstdio>
 #include <thread>
@@ -196,6 +198,21 @@ void test_queue()
     consumer.join();
 }
 
+void test_settings()
+{
+    Settings s;
+    CHECK(parse_upscaling("fsr", s) && s.upscaler == Upscaler::Fsr1 && upscaling_name(s) == "FSR 1");
+    CHECK(parse_upscaling("nis", s) && s.upscaler == Upscaler::Nis && upscaling_name(s) == "NIS");
+    CHECK(parse_upscaling("ultra", s) && s.upscaler == Upscaler::VfxSuperRes && upscaling_name(s) == "VSR ultra");
+    CHECK(parse_upscaling("off", s) && upscaling_name(s) == "off");
+    CHECK(!parse_upscaling("lanczos", s));
+    CHECK(parse_frame_gen("high", s) && s.frame_gen == FrameGen::VfxFrameGen && s.frame_gen_quality == FrameGenQuality::High);
+    CHECK(!parse_frame_gen("x", s));
+    // NIS output is capped at 2x the source.
+    CHECK((upscale_target({960, 540}, {3840, 2160}, 2.0) == Size{1920, 1080}));
+    CHECK((upscale_target({960, 540}, {3840, 2160}) == Size{3840, 2160}));
+}
+
 } // namespace
 
 int main()
@@ -205,6 +222,7 @@ int main()
     test_clock();
     test_scene_cut();
     test_queue();
+    test_settings();
     std::printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

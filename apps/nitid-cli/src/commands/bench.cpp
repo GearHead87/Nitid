@@ -30,6 +30,7 @@ struct BenchOptions {
     bool scene_cuts = true;
     bool hw_decode = true;
     bool verbose = false;
+    float sharpness = 0.5f;
 };
 
 int run(const BenchOptions& o)
@@ -40,6 +41,7 @@ int run(const BenchOptions& o)
     nitid::parse_frame_gen(o.frame_gen, s);
     s.frame_gen_multiplier = o.multiplier;
     s.scene_cut_detection = o.scene_cuts;
+    s.sharpness = o.sharpness;
 
     auto engine = nitid::Engine::create();
     engine->set_settings(s);
@@ -92,7 +94,7 @@ int run(const BenchOptions& o)
     std::println("");
     std::println("| Item | Value |");
     std::println("|---|---|");
-    std::println("| Upscaling | {} |", st.upscaler_active ? std::format("VSR {}", nitid::to_string(s.super_res_quality))
+    std::println("| Upscaling | {} |", st.upscaler_active ? nitid::upscaling_name(s)
                                                            : std::format("off ({})", st.upscaler_note));
     std::println("| Frame generation | {} |",
                  st.frame_gen_active ? std::format("{} x{}", nitid::to_string(s.frame_gen_quality), o.multiplier > 0 ? o.multiplier : 2)
@@ -118,12 +120,13 @@ Runner add_bench_command(CLI::App& app)
     auto o = std::make_shared<BenchOptions>();
     auto* cmd = app.add_subcommand("bench", "Run the pipeline on a file without a window; report speed, optionally save the result");
     cmd->add_option("file", o->file, "Video file")->required()->check(CLI::ExistingFile);
-    cmd->add_option("--upscale", o->upscale, "AI upscaling: off, low, medium, high, ultra")
-        ->check(CLI::IsMember({"off", "bicubic", "low", "medium", "high", "ultra"}))
+    cmd->add_option("--upscale", o->upscale, "Upscaling: VSR (AI) quality bicubic, low, medium, high, ultra; fsr; nis; off")
+        ->check(CLI::IsMember({"off", "bicubic", "low", "medium", "high", "ultra", "fsr", "nis"}))
         ->capture_default_str();
     cmd->add_option("--frame-gen", o->frame_gen, "Frame generation: off, low, medium, high")
         ->check(CLI::IsMember({"off", "low", "medium", "high"}))
         ->capture_default_str();
+    cmd->add_option("--sharpness", o->sharpness, "FSR / NIS sharpening, 0 to 1")->check(CLI::Range(0.0f, 1.0f))->capture_default_str();
     cmd->add_option("--multiplier", o->multiplier, "Frame gen multiplier (2-8)")->check(CLI::Range(2, 8))->capture_default_str();
     cmd->add_option("--size", o->size, "Output box WxH (upscaling fits the video into it)");
     cmd->add_option("--scale", o->scale, "Output box = source size x this (when --size is not given)")->capture_default_str();

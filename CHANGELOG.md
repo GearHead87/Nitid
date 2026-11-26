@@ -8,6 +8,11 @@ release workflow puts that section at the top of the GitHub release, followed by
 
 ## [Unreleased]
 
+### Added
+- **FSR 1 and NIS upscaling** (`--upscale fsr|nis`, `--sharpness 0..1`; `V` cycles VSR / FSR 1 / NIS / off):
+  AMD FidelityFX FSR 1 (EASU + RCAS) and NVIDIA Image Scaling, ported to CUDA. Work on any NVIDIA GPU without
+  the VFX runtime; 0.06–0.08 ms per 1080p frame. NIS scales up to 2x.
+
 ## [0.1.0] - 2026-11-26
 
 The first runnable Nitid: play a video file with NVIDIA AI upscaling and AI frame generation, paced to the
