@@ -91,8 +91,10 @@ jobs:
           if [[ "$tag" == *-* ]]; then prerelease=true; else prerelease=false; fi
           # Previous release: the newest older tag on this history. A normal release compares with the previous
           # normal release (skipping its release candidates); a pre-release with the newest tag of any kind.
+          # (grep exits 1 when nothing is left, e.g. before the first release: that is not an error.)
           previous_tag=$(git -c versionsort.suffix=- tag --list 'v*.*.*' --merged "$ref" --sort=-v:refname \
-            | grep -vxF "$tag" | { if [[ "$prerelease" == "false" ]]; then grep -v -- '-' || true; else cat; fi; } \
+            | { grep -vxF "$tag" || true; } \
+            | { if [[ "$prerelease" == "false" ]]; then grep -v -- '-' || true; else cat; fi; } \
             | head -1)
 
           {
