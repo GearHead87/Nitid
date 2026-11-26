@@ -9,7 +9,7 @@ namespace nitid {
 struct StageTimes {
     double decode_ms = 0;     // decode + colour convert, on the decoder thread (per source frame)
     double upload_ms = 0;     // CPU frame -> GPU (per source frame)
-    double upscale_ms = 0;    // VFX VSR (per source frame)
+    double upscale_ms = 0;    // upscaling or clean-up (per source frame)
     double frame_gen_ms = 0;  // VFX frame generation (per generated frame)
     double output_ms = 0;     // copy to the display / CPU buffer (per output frame)
 };
@@ -28,6 +28,8 @@ struct Stats {
     bool frame_gen_active = false;
     std::string upscaler_note;    // why the upscaler is inactive, if it is
     std::string frame_gen_note;   // why frame gen is inactive, if it is
+    bool cleanup_active = false;  // VFX denoise / deblur at the video's own size (instead of upscaling)
+    std::string cleanup_note;     // why clean-up is inactive, if it was asked for
 
     // Rates
     double source_fps = 0;

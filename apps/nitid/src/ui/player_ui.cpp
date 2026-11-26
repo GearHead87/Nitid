@@ -199,6 +199,18 @@ void PlayerUi::settings_panel(nitid::Engine& e, nitid::Settings& s, const nitid:
     else
         dim_text(std::format("Not running: {}", st.upscaler_note));
 
+    ImGui::SeparatorText("Clean-up (video at its own size)");
+    static const std::pair<Cleanup, const char*> cl[] = {{Cleanup::Off, "Off"}, {Cleanup::Denoise, "Denoise (VFX)"}, {Cleanup::Deblur, "Deblur (VFX)"}};
+    const bool cl_ok[] = {true, caps.super_res, caps.super_res};
+    choice("Clean-up", s.cleanup, cl, cl_ok);
+    if (s.cleanup != Cleanup::Off) {
+        static const std::pair<SuperResQuality, const char*> q[] = {
+            {SuperResQuality::Low, "Low"}, {SuperResQuality::Medium, "Medium"}, {SuperResQuality::High, "High"}, {SuperResQuality::Ultra, "Ultra"}};
+        choice("Strength", s.cleanup_strength, q);
+        if (st.cleanup_active) dim_text(std::format("{:.2f} ms per frame", st.avg.upscale_ms));
+        else dim_text(std::format("Not running: {}", st.cleanup_note));
+    }
+
     ImGui::SeparatorText("Frame generation");
     bool fg = s.frame_gen == FrameGen::VfxFrameGen;
     if (!caps.frame_gen) ImGui::BeginDisabled();

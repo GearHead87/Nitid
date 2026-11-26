@@ -28,6 +28,10 @@ int main(int argc, char** argv)
     cli.add_option("--frame-gen", frame_gen, "Frame generation: off, low, medium, high")
         ->check(CLI::IsMember({"off", "low", "medium", "high"}))
         ->capture_default_str();
+    std::string cleanup = "off";
+    cli.add_option("--cleanup", cleanup, "Same-size VFX clean-up when not upscaling: off, denoise[-low..-ultra], deblur[-...]")
+        ->check([](const std::string& v) { nitid::Settings t; return nitid::parse_cleanup(v, t) ? std::string() : "unknown clean-up " + v; })
+        ->capture_default_str();
     cli.add_option("--sharpness", o.settings.sharpness, "FSR / NIS sharpening, 0 to 1")
         ->check(CLI::Range(0.0f, 1.0f))
         ->capture_default_str();
@@ -75,6 +79,7 @@ int main(int argc, char** argv)
     o.ui = ui == "on" ? 1 : ui == "off" ? 0 : -1;
     parse_upscaling(upscale, o.settings);  // names already checked by CLI11
     parse_frame_gen(frame_gen, o.settings);
+    parse_cleanup(cleanup, o.settings);
     o.settings.frame_gen_multiplier = multiplier;
 
     std::sort(o.capture_at.begin(), o.capture_at.end());

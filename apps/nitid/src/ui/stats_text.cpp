@@ -14,6 +14,9 @@ std::string multiplier_text(const nitid::Settings& s)
 std::string upscaler_text(const nitid::Settings& s, const nitid::Stats& st)
 {
     if (st.upscaler_active) return std::format("{} {:.2f} ms", nitid::upscaling_name(s), st.avg.upscale_ms);
+    if (st.cleanup_active)
+        return std::format("no upscale, {} {} {:.2f} ms", nitid::to_string(s.cleanup), nitid::to_string(s.cleanup_strength),
+                           st.avg.upscale_ms);
     return std::format("upscaling off ({})", st.upscaler_note);
 }
 

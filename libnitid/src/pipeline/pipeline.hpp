@@ -79,7 +79,8 @@ private:
     bool sr_active_ = false, fg_active_ = false;  // sr_active_: any upscaler running
     bool sr_failed_ = false, fg_failed_ = false;
     bool compare_ = false;
-    std::string sr_note_, fg_note_;
+    std::string sr_note_, fg_note_, cleanup_note_;
+    bool cleanup_active_ = false;
 
     std::unique_ptr<vfx::SuperRes> sr_;
     std::unique_ptr<gpu::SpatialScaler> spatial_;

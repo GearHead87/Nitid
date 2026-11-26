@@ -209,6 +209,10 @@ void test_settings()
     CHECK(!parse_upscaling("lanczos", s));
     CHECK(parse_frame_gen("high", s) && s.frame_gen == FrameGen::VfxFrameGen && s.frame_gen_quality == FrameGenQuality::High);
     CHECK(!parse_frame_gen("x", s));
+    CHECK(parse_cleanup("denoise", s) && s.cleanup == Cleanup::Denoise);
+    CHECK(parse_cleanup("deblur-high", s) && s.cleanup == Cleanup::Deblur && s.cleanup_strength == SuperResQuality::High);
+    CHECK(parse_cleanup("off", s) && s.cleanup == Cleanup::Off);
+    CHECK(!parse_cleanup("denoise-max", s) && !parse_cleanup("sharpen", s) && !parse_cleanup("off-high", s));
     // NIS output is capped at 2x the source.
     CHECK((upscale_target({960, 540}, {3840, 2160}, 2.0) == Size{1920, 1080}));
     CHECK((upscale_target({960, 540}, {3840, 2160}) == Size{3840, 2160}));

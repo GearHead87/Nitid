@@ -80,6 +80,21 @@ void Pipeline::configure(Size box, const Settings& settings)
     else if (sr_failed_) sr_note_ = "failed to load (see log)";
     else up_ = Up::Vsr;
     sr_active_ = up_ != Up::None;
+    // Clean-up (same size) when nothing upscales: VSR's denoise / deblur models.
+    cleanup_active_ = false;
+    cleanup_note_.clear();
+    unsigned vsr_mode = unsigned(settings.super_res_quality);
+    if (settings.cleanup != Cleanup::Off) {
+        if (sr_active_) cleanup_note_ = "the video is being upscaled (upscaling cleans up too)";
+        else if (!can_sr_) cleanup_note_ = "VFX runtime not available";
+        else if (sr_failed_) cleanup_note_ = "failed to load (see log)";
+        else {
+            const unsigned strength = std::max(1u, unsigned(settings.cleanup_strength)) - 1;  // Low..Ultra -> 0..3
+            vsr_mode = (settings.cleanup == Cleanup::Denoise ? 8u : 12u) + std::min(strength, 3u);
+            up_ = Up::Vsr;
+            cleanup_active_ = true;
+        }
+    }
 
     Size work = sr_active_ ? target : src_;
     compare_ = settings.compare;
@@ -98,11 +113,11 @@ void Pipeline::configure(Size box, const Settings& settings)
         work_ = work;
         allocate_ring();
     }
-    if (sr_active_ && (!upload_ || upload_.size() != size_t(src_.w) * src_.h * 4))
+    if (up_ != Up::None && (!upload_ || upload_.size() != size_t(src_.w) * src_.h * 4))
         upload_ = gpu::CudaBuffer(size_t(src_.w) * src_.h * 4);
     if (up_ == Up::Vsr) {
         try {
-            sr_->configure(upload_.ptr(), src_.w, src_.h, work_.w, work_.h, unsigned(settings.super_res_quality));
+            sr_->configure(upload_.ptr(), src_.w, src_.h, work_.w, work_.h, vsr_mode);
         } catch (const Error& e) {
             log::error("{}", e.what());
             sr_failed_ = true;
@@ -135,7 +150,8 @@ void Pipeline::configure(Size box, const Settings& settings)
     }
     if (!fg_active_ && fg_ && fg_->configured()) fg_->reset();
     log::info("Pipeline: source {}x{} -> work {}x{} (upscaler {}, frame gen {})", src_.w, src_.h, work_.w, work_.h,
-              sr_active_ ? upscaling_name(settings) : sr_note_, fg_active_ ? "on" : fg_note_);
+              sr_active_ ? upscaling_name(settings) : cleanup_active_ ? std::string(to_string(settings.cleanup)) : sr_note_,
+              fg_active_ ? "on" : fg_note_);
 }
 
 void Pipeline::upload(input::DecodedFrame& f, Slot& dst)
@@ -242,6 +258,8 @@ void Pipeline::fill_stats(Stats& s) const
     s.upscaler_active = sr_active_;
     s.frame_gen_active = fg_active_;
     s.upscaler_note = sr_note_;
+    s.cleanup_active = cleanup_active_;
+    s.cleanup_note = cleanup_note_;
     s.frame_gen_note = fg_note_;
     s.source_frames = source_frames_;
     s.skipped_frames = skipped_;

@@ -32,6 +32,7 @@ struct BenchOptions {
     bool verbose = false;
     float sharpness = 0.5f;
     double start = 0;
+    std::string cleanup = "off";
 };
 
 int run(const BenchOptions& o)
@@ -43,6 +44,7 @@ int run(const BenchOptions& o)
     s.frame_gen_multiplier = o.multiplier;
     s.scene_cut_detection = o.scene_cuts;
     s.sharpness = o.sharpness;
+    nitid::parse_cleanup(o.cleanup, s);
 
     auto engine = nitid::Engine::create();
     engine->set_settings(s);
@@ -98,6 +100,8 @@ int run(const BenchOptions& o)
     std::println("|---|---|");
     std::println("| Upscaling | {} |", st.upscaler_active ? nitid::upscaling_name(s)
                                                            : std::format("off ({})", st.upscaler_note));
+    std::println("| Clean-up | {} |", st.cleanup_active ? std::format("{} {}", nitid::to_string(s.cleanup), nitid::to_string(s.cleanup_strength))
+                                                        : s.cleanup == nitid::Cleanup::Off ? std::string("off") : "not running (" + st.cleanup_note + ")");
     std::println("| Frame generation | {} |",
                  st.frame_gen_active ? std::format("{} x{}", nitid::to_string(s.frame_gen_quality), o.multiplier > 0 ? o.multiplier : 2)
                                      : std::format("off ({})", st.frame_gen_note));
@@ -108,7 +112,7 @@ int run(const BenchOptions& o)
                  n > 1 && steady > 0 ? ((n - 1) / steady) / out_fps : 0);
     std::println("| Decode + convert (per source frame, decoder thread) | {:.2f} ms |", st.avg.decode_ms);
     std::println("| Upload (per source frame) | {:.2f} ms |", st.avg.upload_ms);
-    std::println("| Upscale (per source frame) | {:.2f} ms |", st.avg.upscale_ms);
+    std::println("| Upscale / clean-up (per source frame) | {:.2f} ms |", st.avg.upscale_ms);
     std::println("| Frame gen (per generated frame) | {:.2f} ms |", st.avg.frame_gen_ms);
     std::println("| Copy to CPU (per output frame) | {} |", writer ? std::format("{:.2f} ms", st.avg.output_ms) : "not done (no --output)");
     if (writer) std::println("| Saved | {} |", o.output);
@@ -127,6 +131,9 @@ Runner add_bench_command(CLI::App& app)
         ->capture_default_str();
     cmd->add_option("--frame-gen", o->frame_gen, "Frame generation: off, low, medium, high")
         ->check(CLI::IsMember({"off", "low", "medium", "high"}))
+        ->capture_default_str();
+    cmd->add_option("--cleanup", o->cleanup, "Same-size VFX clean-up when not upscaling: off, denoise[-low|-medium|-high|-ultra], deblur[-...]")
+        ->check([](const std::string& v) { nitid::Settings t; return nitid::parse_cleanup(v, t) ? std::string() : "unknown clean-up " + v; })
         ->capture_default_str();
     cmd->add_option("--sharpness", o->sharpness, "FSR / NIS sharpening, 0 to 1")->check(CLI::Range(0.0f, 1.0f))->capture_default_str();
     cmd->add_option("--multiplier", o->multiplier, "Frame gen multiplier (2-8)")->check(CLI::Range(2, 8))->capture_default_str();

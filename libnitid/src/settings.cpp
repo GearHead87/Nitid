@@ -34,6 +34,16 @@ std::string_view to_string(FrameGen f) noexcept
     return "?";
 }
 
+std::string_view to_string(Cleanup c) noexcept
+{
+    switch (c) {
+        case Cleanup::Off: return "off";
+        case Cleanup::Denoise: return "denoise";
+        case Cleanup::Deblur: return "deblur";
+    }
+    return "?";
+}
+
 std::string_view to_string(FrameGenQuality q) noexcept
 {
     switch (q) {
@@ -92,6 +102,31 @@ bool parse_frame_gen(std::string_view name, Settings& s) noexcept
             return true;
         }
     return false;
+}
+
+bool parse_cleanup(std::string_view name, Settings& s) noexcept
+{
+    auto dash = name.find('-');
+    std::string_view kind = name.substr(0, dash);
+    if (kind == "off" && dash == std::string_view::npos) {
+        s.cleanup = Cleanup::Off;
+        return true;
+    }
+    Cleanup c;
+    if (kind == "denoise") c = Cleanup::Denoise;
+    else if (kind == "deblur") c = Cleanup::Deblur;
+    else return false;
+    SuperResQuality q = s.cleanup_strength;
+    if (dash != std::string_view::npos) {
+        std::string_view st = name.substr(dash + 1);
+        bool ok = false;
+        for (auto v : {SuperResQuality::Low, SuperResQuality::Medium, SuperResQuality::High, SuperResQuality::Ultra})
+            if (st == to_string(v)) q = v, ok = true;
+        if (!ok) return false;
+    }
+    s.cleanup = c;
+    s.cleanup_strength = q;
+    return true;
 }
 
 } // namespace nitid
