@@ -8,6 +8,8 @@ release workflow puts that section at the top of the GitHub release, followed by
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-26
+
 ### Added
 - **Live input from PipeWire** (`nitid --pipewire <node>`): any PipeWire video node (the path screen capture uses),
   upscaled and shown at the display rate. `--live-mode low-latency` (default: the newest frame, ~28 ms from
@@ -16,6 +18,16 @@ release workflow puts that section at the top of the GitHub release, followed by
 - **Screen capture** (`nitid --capture-screen`, or "Capture the screen..." in the window): the desktop's portal asks
   which screen or window to share and remembers the choice. Zero-copy DMA-BUF from the compositor (0.33 ms per
   1440p frame), 165 fps, ~22 ms from capture to screen in low-latency mode. `L` switches low latency / smooth.
+
+### Changed
+- Engine API: `open_pipewire`, `open_screen_capture` (`ScreenCaptureOptions`), `Settings::live_mode`,
+  `SourceInfo::live`; `Stats` gained capture status, arrival rate, capture → screen latency, dropped frames.
+- The Vulkan device uses a second queue (capture) and enables DMA-BUF import when available.
+
+### Known limits
+- No capture-card input and no sound capture. Screen capture needs a Wayland desktop with xdg-desktop-portal
+  (tested: KDE Plasma 6); put Nitid on another screen than the one it captures.
+- Frame generation HIGH still misses some refreshes now and then (see 0.3.0).
 
 ## [0.3.0] - 2026-11-26
 
@@ -114,7 +126,8 @@ display, on Linux. Test results: [tests/v0.1](https://github.com/GearHead87/Niti
 - No audio, no seeking, no on-screen menu and no HDR output yet.
 - Needs an NVIDIA RTX GPU; frame generation needs RTX 40 or 50.
 
-[Unreleased]: https://github.com/GearHead87/Nitid/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/GearHead87/Nitid/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/GearHead87/Nitid/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/GearHead87/Nitid/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/GearHead87/Nitid/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/GearHead87/Nitid/releases/tag/v0.1.0

@@ -6,12 +6,12 @@
 
 cmake_minimum_required(VERSION 3.25)
 
-project(nitid VERSION 0.3.0 LANGUAGES CXX)
+project(nitid VERSION 0.4.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 
 if(NOT TARGET nitid::nitid)
-  find_package(libnitid 0.3 CONFIG REQUIRED)
+  find_package(libnitid 0.4 CONFIG REQUIRED)
 endif()
 
 find_package(SDL3 REQUIRED CONFIG)

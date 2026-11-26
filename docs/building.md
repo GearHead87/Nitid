@@ -4,8 +4,8 @@
 
 - NVIDIA RTX GPU (frame generation: RTX 40/50) and the proprietary driver (tested: 620.73.04)
 - `cmake ninja gcc` (C++23), `vulkan-headers vulkan-icd-loader`, `cuda` (driver API + `nvcc` for the
-  kernels), `ffmpeg` (with NVDEC), `sdl3`, `cli11`, `pipewire` (headers; the library is loaded at run time
-  for sound)
+  kernels), `ffmpeg` (with NVDEC), `sdl3`, `cli11`, `pipewire` and `dbus` (headers; both libraries are loaded at
+  run time, for sound and screen capture), `gst-plugin-pipewire` (only for the live-input tests)
 - Network on the first configure: Dear ImGui 1.93.0 is downloaded by CMake (pinned hash). Offline:
   `-DFETCHCONTENT_SOURCE_DIR_IMGUI=/path/to/imgui-1.93.0`
 - NVIDIA VFX SDK:
@@ -34,6 +34,7 @@ Building components separately (engine installed, apps against it) is described 
 build/apps/nitid/nitid video.mp4                       # window, VSR HIGH, frame gen MEDIUM per refresh, sound
 build/apps/nitid/nitid                                 # no file: open one from the window (or drop it on it)
 build/apps/nitid/nitid video.mp4 --fullscreen --frame-gen low --multiplier 2 --upscale fsr --start 60
+build/apps/nitid/nitid --capture-screen               # screen capture (the desktop asks which screen / window)
 build/apps/nitid/nitid --help                          # all options; F1 in the window lists the keys
 
 build/apps/nitid-cli/nitid-cli info [video.mp4]
@@ -43,7 +44,7 @@ build/apps/nitid-cli/nitid-cli bench video.mp4 --size 2560x1440 --frame-gen medi
 Player: move the mouse for the control bar (seek bar, volume, Settings / Stats panels). Keys: Space pause,
 Left/Right ±5 s, PgDn/PgUp ±60 s, Home start, Up/Down volume, M mute, `,`/`.` A/V offset, V upscaler
 (VSR / FSR 1 / NIS / off), B VSR quality, G frame gen on/off, H frame gen quality, 0/2/3/4 frames per source
-frame (0 = per refresh), C scene cuts, X compare original | Nitid, P settings, I stats, O open, Tab hide controls, F/F11 or double-click
+frame (0 = per refresh), C scene cuts, L live mode (low latency / smooth), X compare original | Nitid, P settings, I stats, O open, Tab hide controls, F/F11 or double-click
 fullscreen, F1 keys, Esc/Q quit.
 
 Environment: `NITID_LOG=debug` (more log, e.g. each scene cut), `NITID_VFX_DIR=/path/to/vfx/libs`.
@@ -57,6 +58,7 @@ Actions does. See [releasing.md](releasing.md).
 
 - Unit tests: `ctest --test-dir build`
 - Feature tests (open windows, need test media from `scripts/fetch-media.sh`):
-  [tests/v0.1/README.md](../tests/v0.1/README.md), [tests/v0.2/README.md](../tests/v0.2/README.md)
+  [tests/v0.1](../tests/v0.1/README.md), [v0.2](../tests/v0.2/README.md), [v0.3](../tests/v0.3/README.md),
+  [v0.4](../tests/v0.4/README.md)
 - Release tarball on a GPU machine: [tests/release/README.md](../tests/release/README.md)
 - Phase 0 feasibility spikes: [tools/spikes/README.md](../tools/spikes/README.md)

@@ -65,6 +65,13 @@ timeout 40 "$app/bin/nitid" "$media/sintel_trailer-1080p.mp4" --start 30 --upsca
 echo "== sintel_trailer-1080p.mp4 --frame-gen high --compare (render-ahead pacing, compare view)"
 timeout 40 "$app/bin/nitid" "$media/sintel_trailer-1080p.mp4" --frame-gen high --compare --quit-after 8 --volume 0.2 2>&1 \
   | grep -E "can't keep up|^(FrameGen|Display):" || true
+if command -v gst-launch-1.0 >/dev/null && gst-inspect-1.0 pipewiresink >/dev/null 2>&1; then
+  echo "== live input: synthetic test pattern through PipeWire (nothing from the desktop), low latency, 6 s"
+  (timeout 15 gst-launch-1.0 -q videotestsrc pattern=ball is-live=true ! video/x-raw,format=BGRx,width=1280,height=720,framerate=60/1 \
+     ! pipewiresink mode=provide stream-properties="props,node.name=nitid-release-test" >/dev/null 2>&1 &)
+  sleep 2
+  timeout 30 "$app/bin/nitid" --pipewire nitid-release-test --quit-after 6 2>&1 | grep -E '^(Display|Live):' || true
+fi
 echo "== no file (open screen), 3 s"
 timeout 40 "$app/bin/nitid" --quit-after 3 >/dev/null 2>&1 && echo "ran, exit 0"
 echo '```'

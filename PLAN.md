@@ -15,7 +15,8 @@ shader logic, and runs on NVIDIA's Linux SDKs.
 | Linux releases | ✅ Done (2026-11-26): tarball with bundled FFmpeg/SDL3 + `nitid-setup-vfx`, GitHub Actions CI and tag-driven releases with changelog. [docs/releasing.md](docs/releasing.md), tests: [tests/release/README.md](tests/release/README.md). |
 | Nitid 0.2 (Phase 1 rest) | ✅ Done (2026-11-26): FSR 1 / NIS, frame-exact seeking, sound with A/V sync (PipeWire), on-screen controls (ImGui). Tests: [tests/v0.2/README.md](tests/v0.2/README.md). |
 | Nitid 0.3 (Phase 2 rest) | ✅ Done (2026-11-26): render-ahead worker with frame-gen pacing (HIGH smooth at 165 Hz), compare view, optional VFX clean-up. TrueHDR waits for HDR output. Tests: [tests/v0.3/README.md](tests/v0.3/README.md). |
-| Nitid 0.4 (Phase 3) | ⏭️ Next: screen capture (PipeWire portal), low-latency mode for live input. Capture card skipped. |
+| Nitid 0.4 (Phase 3) | ✅ Done (2026-11-27): live input from PipeWire, screen capture through the portal (DMA-BUF, 165 fps, 22 ms capture → screen), low-latency and smooth live modes. Capture card skipped (no device). Tests: [tests/v0.4/README.md](tests/v0.4/README.md). |
+| Phase 4: Veyra-style DLSS | ⏭️ Next (not started): optical flow, DLSS SR / DLSS-G on video. |
 
 ## Phase 0 findings (what changed in the plan)
 

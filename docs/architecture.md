@@ -1,4 +1,4 @@
-# Nitid architecture (0.3)
+# Nitid architecture (0.4)
 
 How the code is organised, how a frame moves through it, and where each planned feature plugs in.
 For the overall plan see [PLAN.md](../PLAN.md); for build steps see [building.md](building.md).
@@ -40,9 +40,11 @@ gpu/                  VulkanContext (NVIDIA GPU picked explicitly, dynamic rende
   kernels/scale.cu    FSR 1 EASU + RCAS, NIS NVScaler (CUDA ports of the MIT shaders)
 audio/                AudioPlayer (own FFmpeg demuxer + decoder thread, PipeWire stream, follows the picture),
                       av_sync.hpp (the resampling controller)
-platform/             PipeWire client library loaded at run time (sound now, screen capture later)
-input/                FrameSource interface (next, recycle, seek); FfmpegFileSource (decoder thread, NVDEC + GPU
-                      colour conversion, CPU fallback, frame-exact seek); SceneCutDetector
+platform/             PipeWire and libdbus loaded at run time (sound, screen capture, portal)
+input/                FrameSource interface (next, recycle, seek; live: try_next); FfmpegFileSource (decoder thread,
+                      NVDEC + GPU colour conversion, CPU fallback, frame-exact seek); SceneCutDetector;
+                      PipeWireCapture (live video: DMA-BUF via Vulkan on a second queue, or shared memory; newest
+                      frame only); ScreenCastPortal (desktop portal over D-Bus, restore token)
 vfx/                  VFX runtime loader (dlopen), SuperRes (VSR), FrameGen (VFG, Timestep mode)
 pipeline/             Pipeline (upload -> VSR / FSR / NIS or VFX clean-up -> two-frame ring -> frame gen; keeps the
                       original next to each frame in compare mode), RenderAhead (window output: the pipeline on its
@@ -78,6 +80,9 @@ FFmpeg/NVDEC ─► NV12 (CUDA) ─►     Pipeline::produce(next grid position)
   settings changes are applied by the worker (models load without freezing the window). When frame generation
   costs more than 95 % of a refresh it prepares one frame every `stride` refreshes (tests/v0.3/01).
 - **Headless** (`render_headless`): position = n / multiplier, output copied to the caller's buffer; no worker.
+- **Live input** (screen capture, `open_pipewire`): no render-ahead (a frame can't be prepared before it
+  arrives). Each refresh `Pipeline::produce_live` takes the newest captured frame and either shows it (low
+  latency) or generates the moment one frame interval ago between the last two (smooth) (tests/v0.4).
 - **Sound follows the picture**: the picture is locked to the display; each frame tells the AudioPlayer when it
   will be on screen (measured present-to-screen time), the PipeWire callback knows when its buffer will be
   heard, and the player resamples by ≤ 1 % or resyncs on jumps (tests/v0.2/03).
@@ -113,9 +118,9 @@ FFmpeg/NVDEC ─► NV12 (CUDA) ─►     Pipeline::produce(next grid position)
 | NIS / FSR 1 (1) | ✅ 0.2: `gpu/spatial_scaler.*`, `kernels/scale.cu` | CUDA ports; NIS ≤ 2x |
 | Presets, hotkeys, gamepad (5) | presets: `libnitid` (TOML); input: `apps/nitid/src/key_bindings.*` | key table already single-source |
 | TrueHDR / HDR output (2, postponed) | `vfx/true_hdr.*`; HDR10 swapchain in `output/` | Settings gains HDR fields |
-| Screen capture (3) | `input/pipewire_source.*` implementing `FrameSource` | spike S6 code; DMA-BUF → Vulkan → CUDA |
+| Screen capture (3) | ✅ 0.4: `input/pipewire_capture.*`, `input/screencast_portal.*` | DMA-BUF → Vulkan → CUDA, 0.33 ms per 1440p frame |
 | Capture card (3) | `input/v4l2_source.*` implementing `FrameSource` | skipped for now (no card) |
-| Low-latency live mode (3) | `pipeline/` option: no lookahead frame, frame gen off or extrapolation | live inputs can't wait for `next` |
+| Low-latency live mode (3) | ✅ 0.4: `Settings::live_mode`, `Pipeline::produce_live` | low latency = newest frame; smooth = frame gen one frame back |
 | DLSS SR / DLSS-G lite + optical flow (4) | `ngx/` + `motion/` modules; new `Upscaler` / `FrameGen` enum values | spikes S2, S3, S4, F1 |
 | VSR / frame gen off the render thread | ✅ 0.3: `pipeline/render_ahead.*` | frame gen HIGH smooth at 165 Hz (stride 2) |
 | Side-by-side comparison (2) | ✅ 0.3: pipeline keeps originals, presenter split blit | UI draws the line |
