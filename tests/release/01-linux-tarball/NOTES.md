@@ -24,6 +24,14 @@ work on a real machine the way a user would use it?
 VFX effects available, Sintel trailer for 5 s with VSR + FG MEDIUM per refresh: 165.0 fps, 0 skipped,
 1 missed refresh out of 786 frames. That is start-up jitter; the local runs had 0.
 
+## 0.2.0 (2026-11-26)
+
+Same test with the 0.2 additions ([output-2026-11-26-v0.2.0.md](output-2026-11-26-v0.2.0.md)): tarball 12 MB,
+dependency check passes (PipeWire is loaded at run time, so it is not a link dependency). On the GPU: sound
+through PipeWire in sync (A/V +2.3 ms, Bluetooth headphones 225 ms), seek to 30 s in 46 ms, FSR 1 0.15 ms, the
+open-file screen runs, 165 fps. Release vs developer build: **identical frames** for VSR + frame gen 2x and for
+FSR 1 after a seek. (lq_540p had 26 missed refreshes in its single 6 s run; the others 0.)
+
 ## Findings
 
 - **NVIDIA's `nvidia-vfx` wheel is only on pypi.nvidia.com.** On PyPI there is just a 3.7 KB stub source
