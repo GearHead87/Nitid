@@ -1,0 +1,116 @@
+name: Build Linux
+
+# Builds the Linux release tarball (packaging/linux/build-release.sh: bundled FFmpeg + SDL3, unit tests,
+# dependency check, smoke test), then checks that it starts on other distros. Called by ci.yml and release.yml.
+# The runners have no NVIDIA GPU: the GPU paths are tested by hand (tests/release/), CI checks the build and
+# that the programs start.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to build (default the triggering one)
+        required: false
+        type: string
+        default: ""
+    outputs:
+      artifact:
+        description: Name of the artifact holding the tarball
+        value: ${{ jobs.build.outputs.artifact }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build tarball (Ubuntu 24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    outputs:
+      artifact: nitid-linux-x86_64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+
+      - name: Install build tools
+        run: sudo packaging/linux/install-build-deps.sh
+
+      # FFmpeg + SDL3 take ~10 minutes to build; reuse them until their versions or build script change.
+      - name: Cache bundled libraries
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/nitid-work/deps
+          key: linux-deps-ubuntu-24.04-${{ hashFiles('packaging/linux/versions.env', 'packaging/linux/build-deps.sh') }}
+
+      - name: Build, test and pack
+        run: packaging/linux/build-release.sh "$RUNNER_TEMP/nitid-work" dist
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nitid-linux-x86_64
+          path: dist/*
+          if-no-files-found: error
+
+      # The distro checks below have no NVIDIA driver; the CUDA link stub stands in for libcuda.so.1.
+      - name: Upload CUDA stub for the distro checks
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cuda-stub
+          path: /usr/local/cuda/lib64/stubs/libcuda.so
+          retention-days: 1
+
+  distro-check:
+    name: Starts on ${{ matrix.image }}
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ubuntu:24.04
+            setup: apt-get update && apt-get install -y --no-install-recommends libvulkan1 zlib1g file binutils
+          - image: debian:trixie
+            setup: apt-get update && apt-get install -y --no-install-recommends libvulkan1 zlib1g file binutils
+          - image: fedora:latest
+            setup: dnf install -y vulkan-loader zlib-ng-compat file binutils findutils
+          - image: archlinux:latest
+            setup: pacman -Syu --noconfirm vulkan-icd-loader zlib file binutils
+    steps:
+      - name: Install the host libraries Nitid uses
+        run: ${{ matrix.setup }}
+
+      - name: Checkout (scripts)
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+
+      - name: Download tarball
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: nitid-linux-x86_64
+          path: dist
+
+      - name: Download CUDA stub
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: cuda-stub
+          path: cuda-stub
+
+      - name: Extract, check dependencies, start
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum -c ./*.sha256)
+          mkdir extracted
+          tar -xzf dist/nitid-*-linux-x86_64.tar.gz -C extracted
+          app=$(ls -d extracted/nitid-*-linux-x86_64)
+          version=${app##*/nitid-}; version=${version%-linux-x86_64}
+          packaging/linux/check-deps.sh "$app"
+          CUDA_STUB="$PWD/cuda-stub/libcuda.so" packaging/linux/smoke-test.sh "$app" "$version"

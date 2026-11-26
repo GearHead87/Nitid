@@ -1,0 +1,24 @@
+name: CI
+
+# Every push to main and every pull request: build the Linux release tarball, run the unit tests, check its
+# dependencies and that it starts on Ubuntu, Debian, Fedora and Arch. The tarball is kept as a build artifact.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**", "tests/**", "tools/**", "results/**"]
+  pull_request:
+    paths-ignore: ["**.md", "docs/**", "tests/**", "tools/**", "results/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux
+    uses: ./.github/workflows/build-linux.yml

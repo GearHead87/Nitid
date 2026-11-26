@@ -12,6 +12,7 @@ shader logic, and runs on NVIDIA's Linux SDKs.
 | Project setup: engine + GUI + CLI layout, CMake build, install/package files | ✅ Done (placeholder code; combined and standalone builds tested) |
 | Phase 0: feasibility tests | ✅ Mostly done (2026-11-23): plan in [tools/spikes/TESTPLAN.md](tools/spikes/TESTPLAN.md), results in [tools/spikes/README.md](tools/spikes/README.md). Waiting on the user: G1–G5 (game results), M5 (`sudo modprobe`). Postponed: HDR (M3, H1, V4 viewing). Skipped: capture card (M6, S8). |
 | **Nitid 0.1 (minimum version)** | ✅ Done (2026-11-26): file → NVDEC + GPU colour conversion → VFX VSR → VFX frame generation → window at the display refresh; `nitid-cli info/bench`. Tests: [tests/v0.1/README.md](tests/v0.1/README.md). Architecture: [docs/architecture.md](docs/architecture.md). |
+| Linux releases | ✅ Done (2026-11-26): tarball with bundled FFmpeg/SDL3 + `nitid-setup-vfx`, GitHub Actions CI and tag-driven releases with changelog. [docs/releasing.md](docs/releasing.md), tests: [tests/release/README.md](tests/release/README.md). |
 | Phase 1: basic player (rest) | ⏭️ Next: audio + A/V sync, ImGui overlay, NIS/FSR1, seeking |
 
 ## Phase 0 findings (what changed in the plan)
@@ -224,7 +225,12 @@ nitid/
     nitid/src/            GUI player: app, key bindings, ui/ (stats text now, ImGui later)
     nitid-cli/src/        headless: commands/ (info, bench; export, virtual-camera later), util/
   tests/v0.1/             feature tests of the minimum version (run.sh + NOTES.md per test)
-  docs/                   architecture, building
+  tests/release/          release tarball tests on a GPU machine
+  packaging/linux/        release tarball build (Docker / CI), nitid-setup-vfx, pinned versions
+  scripts/                bump-version, check-version, release-notes, media and SDK fetching
+  .github/workflows/      ci.yml, release.yml, build-linux.yml
+  CHANGELOG.md            per-version changes (top of each GitHub release)
+  docs/                   architecture, building, releasing
   tools/spikes/           Phase 0 feasibility programs
 ```
 
