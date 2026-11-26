@@ -4,7 +4,10 @@
 
 - NVIDIA RTX GPU (frame generation: RTX 40/50) and the proprietary driver (tested: 620.73.04)
 - `cmake ninja gcc` (C++23), `vulkan-headers vulkan-icd-loader`, `cuda` (driver API + `nvcc` for the
-  kernels), `ffmpeg` (with NVDEC), `sdl3`, `cli11`
+  kernels), `ffmpeg` (with NVDEC), `sdl3`, `cli11`, `pipewire` (headers; the library is loaded at run time
+  for sound)
+- Network on the first configure: Dear ImGui 1.93.0 is downloaded by CMake (pinned hash). Offline:
+  `-DFETCHCONTENT_SOURCE_DIR_IMGUI=/path/to/imgui-1.93.0`
 - NVIDIA VFX SDK:
   - C headers: `scripts/fetch-sdks.sh` (into `third_party/Maxine-VFX-SDK/nvvfx/include`)
   - runtime: `tools/spikes/vfx-env/setup.sh` (NVIDIA's `nvidia-vfx` wheel; the libraries in
@@ -28,17 +31,20 @@ Building components separately (engine installed, apps against it) is described 
 ## Run
 
 ```sh
-build/apps/nitid/nitid video.mp4                       # window, VSR HIGH, frame gen MEDIUM per refresh
-build/apps/nitid/nitid video.mp4 --fullscreen --frame-gen low --multiplier 2
-build/apps/nitid/nitid --help                          # all options; keys are printed at start (F1)
+build/apps/nitid/nitid video.mp4                       # window, VSR HIGH, frame gen MEDIUM per refresh, sound
+build/apps/nitid/nitid                                 # no file: open one from the window (or drop it on it)
+build/apps/nitid/nitid video.mp4 --fullscreen --frame-gen low --multiplier 2 --upscale fsr --start 60
+build/apps/nitid/nitid --help                          # all options; F1 in the window lists the keys
 
 build/apps/nitid-cli/nitid-cli info [video.mp4]
 build/apps/nitid-cli/nitid-cli bench video.mp4 --size 2560x1440 --frame-gen medium -o out.mkv
 ```
 
-Keys in the player: Space pause, V upscaling on/off, B upscaling quality, G frame gen on/off,
-H frame gen quality, 0/2/3/4 frame gen multiplier (0 = per refresh), C scene cuts, F/F11 fullscreen,
-S print stats, R reset stats, F1 help, Esc/Q quit.
+Player: move the mouse for the control bar (seek bar, volume, Settings / Stats panels). Keys: Space pause,
+Left/Right ±5 s, PgDn/PgUp ±60 s, Home start, Up/Down volume, M mute, `,`/`.` A/V offset, V upscaler
+(VSR / FSR 1 / NIS / off), B VSR quality, G frame gen on/off, H frame gen quality, 0/2/3/4 frames per source
+frame (0 = per refresh), C scene cuts, P settings, I stats, O open, Tab hide controls, F/F11 or double-click
+fullscreen, F1 keys, Esc/Q quit.
 
 Environment: `NITID_LOG=debug` (more log, e.g. each scene cut), `NITID_VFX_DIR=/path/to/vfx/libs`.
 
@@ -50,7 +56,7 @@ Actions does. See [releasing.md](releasing.md).
 ## Tests
 
 - Unit tests: `ctest --test-dir build`
-- 0.1 feature tests (open windows, need test media from `scripts/fetch-media.sh`):
-  [tests/v0.1/README.md](../tests/v0.1/README.md)
+- Feature tests (open windows, need test media from `scripts/fetch-media.sh`):
+  [tests/v0.1/README.md](../tests/v0.1/README.md), [tests/v0.2/README.md](../tests/v0.2/README.md)
 - Release tarball on a GPU machine: [tests/release/README.md](../tests/release/README.md)
 - Phase 0 feasibility spikes: [tools/spikes/README.md](../tools/spikes/README.md)

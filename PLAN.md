@@ -13,7 +13,9 @@ shader logic, and runs on NVIDIA's Linux SDKs.
 | Phase 0: feasibility tests | ✅ Mostly done (2026-11-23): plan in [tools/spikes/TESTPLAN.md](tools/spikes/TESTPLAN.md), results in [tools/spikes/README.md](tools/spikes/README.md). Waiting on the user: G1–G5 (game results), M5 (`sudo modprobe`). Postponed: HDR (M3, H1, V4 viewing). Skipped: capture card (M6, S8). |
 | **Nitid 0.1 (minimum version)** | ✅ Done (2026-11-26): file → NVDEC + GPU colour conversion → VFX VSR → VFX frame generation → window at the display refresh; `nitid-cli info/bench`. Tests: [tests/v0.1/README.md](tests/v0.1/README.md). Architecture: [docs/architecture.md](docs/architecture.md). |
 | Linux releases | ✅ Done (2026-11-26): tarball with bundled FFmpeg/SDL3 + `nitid-setup-vfx`, GitHub Actions CI and tag-driven releases with changelog. [docs/releasing.md](docs/releasing.md), tests: [tests/release/README.md](tests/release/README.md). |
-| Phase 1: basic player (rest) | ⏭️ Next: audio + A/V sync, ImGui overlay, NIS/FSR1, seeking |
+| Nitid 0.2 (Phase 1 rest) | ✅ Done (2026-11-26): FSR 1 / NIS, frame-exact seeking, sound with A/V sync (PipeWire), on-screen controls (ImGui). Tests: [tests/v0.2/README.md](tests/v0.2/README.md). |
+| Nitid 0.3 (Phase 2 rest) | ⏭️ Next: VSR + frame gen on a worker ahead of the display (frame gen HIGH, even pacing when the GPU can't keep up), side-by-side comparison, optional VFX denoise. TrueHDR waits for HDR output. |
+| Nitid 0.4 (Phase 3) | Planned: screen capture (PipeWire portal), low-latency mode for live input. Capture card skipped. |
 
 ## Phase 0 findings (what changed in the plan)
 

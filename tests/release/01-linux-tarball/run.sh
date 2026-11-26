@@ -53,27 +53,33 @@ echo '```'
 echo '```'
 
 echo
-echo "### Window playback, 6 s each (VSR HIGH + frame gen MEDIUM per refresh)"
+echo "### Window playback, 6 s each (VSR HIGH + frame gen MEDIUM per refresh, on-screen controls, sound at 0.2)"
 echo '```'
 for f in lq_540p.mp4 src_4k_av1.mkv sintel_trailer-1080p.mp4; do
   echo "== $f"
-  timeout 40 "$app/bin/nitid" "$media/$f" --quit-after 6 2>&1 | grep -vE '^\s*$' | tail -4 || true
+  timeout 40 "$app/bin/nitid" "$media/$f" --quit-after 6 --volume 0.2 2>&1 | grep -E '^(Sound|Display|Upscale|FrameGen):' || true
 done
+echo "== sintel_trailer-1080p.mp4 --start 30 --upscale fsr (seek + FSR 1)"
+timeout 40 "$app/bin/nitid" "$media/sintel_trailer-1080p.mp4" --start 30 --upscale fsr --quit-after 5 --volume 0.2 2>&1 \
+  | grep -E 'seek to|^(Sound|Display|Upscale):' || true
+echo "== no file (open screen), 3 s"
+timeout 40 "$app/bin/nitid" --quit-after 3 >/dev/null 2>&1 && echo "ran, exit 0"
 echo '```'
 
 echo
 echo "### Release build vs developer build: same bench output?"
-echo "540p -> 1080p, VSR HIGH + frame gen MEDIUM 2x, first 96 output frames, lossless."
+echo "540p -> 1080p, first 96 output frames, lossless: (1) VSR HIGH + frame gen MEDIUM 2x, (2) FSR 1 + seek to 4 s."
 echo '```'
-for b in release dev; do
-  cli=$([ $b = release ] && echo "$app/bin/nitid-cli" || echo "$dev_cli")
-  "$cli" bench "$media/lq_540p.mp4" --size 1920x1080 --frame-gen medium --multiplier 2 --frames 96 \
-    --lossless -o "$tmp/$b.mkv" 2>/dev/null | tail -3
-done
-ffmpeg -hide_banner -nostdin -i "$tmp/release.mkv" -i "$tmp/dev.mkv" -lavfi "[0][1]psnr" -f null - 2>&1 \
-  | grep -oE 'PSNR .*' | tail -1
-for b in release dev; do
-  ffmpeg -hide_banner -loglevel error -nostdin -i "$tmp/$b.mkv" -map 0:v -f framemd5 - | grep -v '^#' | md5sum | sed "s/-/$b frames/"
+for job in "vsr --frame-gen medium --multiplier 2" "fsr --upscale fsr --start 4"; do
+  read -r name args <<<"$job"
+  for b in release dev; do
+    cli=$([ $b = release ] && echo "$app/bin/nitid-cli" || echo "$dev_cli")
+    # shellcheck disable=SC2086
+    "$cli" bench "$media/lq_540p.mp4" --size 1920x1080 $args --frames 96 --lossless -o "$tmp/${name}_$b.mkv" >/dev/null 2>&1
+  done
+  for b in release dev; do
+    ffmpeg -hide_banner -loglevel error -nostdin -i "$tmp/${name}_$b.mkv" -map 0:v -f framemd5 - | grep -v '^#' | md5sum | sed "s/-/$name $b frames/"
+  done
 done
 echo '```'
 

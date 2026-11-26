@@ -8,6 +8,11 @@ release workflow puts that section at the top of the GitHub release, followed by
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-26
+
+Nitid becomes a complete video player: sound in sync, seeking, on-screen controls, and non-AI upscalers for any
+NVIDIA GPU. Test results: [tests/v0.2](https://github.com/GearHead87/Nitid/blob/main/tests/v0.2/README.md).
+
 ### Added
 - **FSR 1 and NIS upscaling** (`--upscale fsr|nis`, `--sharpness 0..1`; `V` cycles VSR / FSR 1 / NIS / off):
   AMD FidelityFX FSR 1 (EASU + RCAS) and NVIDIA Image Scaling, ported to CUDA. Work on any NVIDIA GPU without
@@ -25,8 +30,19 @@ release workflow puts that section at the top of the GitHub release, followed by
 ### Changed
 - At the end of a video the player stays on the last frame (Replay) instead of quitting; `--exit-at-end` quits.
 - `V` cycles the upscaler (VSR / FSR 1 / NIS / off) instead of switching VSR on and off.
+- F1 shows the keys in the window instead of printing them.
 - Engine API: `seek`, `position`, sound controls, `set_overlay` / `vulkan_device` for app overlays; the Vulkan
   device enables dynamic rendering.
+
+### Fixed
+- The display clock started before the first frame after a seek was decoded, so the picture jumped ahead by the
+  decoding time (11–38 ms at 1080p) right after a seek.
+
+### Known limits
+- Frame generation HIGH is still too slow for one frame per refresh at 165 Hz (next version).
+- No HDR output; no screen capture yet. Sound is played only in the window (not by `nitid-cli`).
+- A/V sync is measured by Nitid (PipeWire's reported speaker delay vs. the measured display delay); if a device
+  reports its delay wrongly, `,` / `.` adjust it.
 
 ## [0.1.0] - 2026-11-26
 
@@ -62,5 +78,6 @@ display, on Linux. Test results: [tests/v0.1](https://github.com/GearHead87/Niti
 - No audio, no seeking, no on-screen menu and no HDR output yet.
 - Needs an NVIDIA RTX GPU; frame generation needs RTX 40 or 50.
 
-[Unreleased]: https://github.com/GearHead87/Nitid/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/GearHead87/Nitid/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/GearHead87/Nitid/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/GearHead87/Nitid/releases/tag/v0.1.0

@@ -12,7 +12,7 @@
 
 cmake_minimum_required(VERSION 3.25)
 
-project(nitid_superbuild VERSION 0.1.0 LANGUAGES CXX)
+project(nitid_superbuild VERSION 0.2.0 LANGUAGES CXX)
 
 option(NITID_BUILD_GUI "Build the nitid GUI player" ON)
 option(NITID_BUILD_CLI "Build the nitid-cli headless tool" ON)

@@ -1,4 +1,4 @@
-# Nitid architecture (0.1)
+# Nitid architecture (0.2)
 
 How the code is organised, how a frame moves through it, and where each planned feature plugs in.
 For the overall plan see [PLAN.md](../PLAN.md); for build steps see [building.md](building.md).
@@ -8,7 +8,7 @@ For the overall plan see [PLAN.md](../PLAN.md); for build steps see [building.md
 | Component | What it is | Depends on |
 |---|---|---|
 | `libnitid/` | The engine: `libnitid.so` + CMake package `libnitid` (target `nitid::nitid`) | Vulkan, CUDA driver API, FFmpeg, VFX SDK headers (runtime loaded at run time) |
-| `apps/nitid/` | GUI player (`nitid`) | libnitid, SDL3, CLI11 |
+| `apps/nitid/` | GUI player (`nitid`) | libnitid, SDL3, CLI11, Dear ImGui (downloaded at configure time) |
 | `apps/nitid-cli/` | Headless tool (`nitid-cli`) | libnitid, CLI11 |
 
 Each is its own CMake project. The combined build links the in-tree engine; standalone app builds use
@@ -19,11 +19,11 @@ Each is its own CMake project. The combined build links the in-tree engine; stan
 | Header | Contents |
 |---|---|
 | `nitid.hpp` | Includes everything below |
-| `engine.hpp` | `Engine`: create, open a file, settings, stats, window output (`attach_window`, `render_frame`), headless output (`set_headless_output`, `render_headless`), test hook `capture_next_window_frame` |
+| `engine.hpp` | `Engine`: create, open a file, seek, sound (volume, mute, A/V offset), settings, stats, window output (`attach_window`, `render_frame`, `set_overlay` + `vulkan_device` for an app-drawn overlay), headless output (`set_headless_output`, `render_headless`), test hook `capture_next_window_frame` |
 | `settings.hpp` | `Settings` (upscaler, frame gen, quality, multiplier, scene cuts) + name parsing shared by both apps |
 | `stats.hpp` | `Stats` snapshot: sizes, what is active and why not, rates, counters, per-stage times |
 | `source.hpp` | `SourceInfo`, `OpenOptions` |
-| `window.hpp` | `WindowTarget`: the app creates the surface for the engine's Vulkan instance |
+| `window.hpp` | `WindowTarget` (the app creates the surface for the engine's Vulkan instance), `VulkanDevice`, `OverlayFrame` / `OverlayCallback` |
 | `error.hpp` | `nitid::Error` (all API failures; message is user-readable) |
 | `version.hpp` | runtime library version |
 
@@ -33,15 +33,22 @@ Each is its own CMake project. The combined build links the in-tree engine; stan
 engine.cpp            Engine::Impl: owns everything below, drives one frame per call
 settings.cpp          to_string / parse helpers
 core/                 log (NITID_LOG=debug), errors, BoundedQueue, RunningAverage
-gpu/                  VulkanContext (NVIDIA GPU picked explicitly), CudaContext (UUID-matched, *blocking*
-                      stream), interop (Vulkan buffers/semaphores shared with CUDA), Kernels (embedded PTX)
+gpu/                  VulkanContext (NVIDIA GPU picked explicitly, dynamic rendering on), CudaContext (UUID-matched,
+                      *blocking* stream), interop (Vulkan buffers/semaphores shared with CUDA), Kernels (embedded
+                      PTX), SpatialScaler (FSR 1 / NIS)
   kernels/color.cu    NV12/P010 -> RGBA8, luma thumbnail (compiled to PTX by nvcc at build time)
-input/                FrameSource interface; FfmpegFileSource (decoder thread, NVDEC + GPU colour
-                      conversion, CPU fallback); SceneCutDetector
+  kernels/scale.cu    FSR 1 EASU + RCAS, NIS NVScaler (CUDA ports of the MIT shaders)
+audio/                AudioPlayer (own FFmpeg demuxer + decoder thread, PipeWire stream, follows the picture),
+                      av_sync.hpp (the resampling controller)
+platform/             PipeWire client library loaded at run time (sound now, screen capture later)
+input/                FrameSource interface (next, recycle, seek); FfmpegFileSource (decoder thread, NVDEC + GPU
+                      colour conversion, CPU fallback, frame-exact seek); SceneCutDetector
 vfx/                  VFX runtime loader (dlopen), SuperRes (VSR), FrameGen (VFG, Timestep mode)
-pipeline/             Pipeline (upload -> VSR -> two-frame ring -> frame gen), frame_layout (size maths),
+pipeline/             Pipeline (upload -> VSR / FSR / NIS -> two-frame ring -> frame gen), frame_layout (size maths),
                       frame_clock (display clock, frame/phase selection)
-output/               SwapchainPresenter (FIFO, two presents queued, present-wait stats, capture hook)
+output/               SwapchainPresenter (FIFO, two presents queued, present-wait stats and display latency,
+                      app overlay via dynamic rendering, capture hook)
+third_party/          NIS_Config.h (MIT), license texts of FSR 1 / NIS
 tests/ (libnitid/tests) unit tests for the pure logic (ctest)
 ```
 
@@ -55,9 +62,11 @@ FFmpeg/NVDEC ─► NV12 (CUDA, our ctx) ─► [queue of 4] ─► Pipeline::pr
    kernel: luma thumbnail → CPU             │  VSR (once per source frame) → ring[next]
    SceneCutDetector                         │  frame gen(ring[cur], ring[next], phase) if between frames
                                             ▼
+                                     AudioPlayer::sync(media time, when it will be on screen)
                                      SwapchainPresenter::present
                                         CUDA copy → shared buffer → signal semaphore
-                                        Vulkan: wait → copy to image → blit (fit) → present (FIFO)
+                                        Vulkan: wait → copy to image → blit (fit) → app overlay (ImGui)
+                                                → present (FIFO)
                                         wait until the present from 2 refreshes ago is on screen ─► 165 Hz
 ```
 
@@ -67,6 +76,11 @@ FFmpeg/NVDEC ─► NV12 (CUDA, our ctx) ─► [queue of 4] ─► Pipeline::pr
 - **Frames that fall behind** are skipped *before* upload/VSR (no GPU time spent on frames never shown).
 - **Scene cuts**: a cut between `cur` and `next` makes frame gen hold `cur` instead of morphing.
 - **Headless** (`render_headless`): position = n / multiplier, output copied to the caller's buffer.
+- **Sound follows the picture**: the picture is locked to the display; each frame tells the AudioPlayer when it
+  will be on screen (measured present-to-screen time), the PipeWire callback knows when its buffer will be
+  heard, and the player resamples by ≤ 1 % or resyncs on jumps (tests/v0.2/03).
+- **Seek**: the decoder seeks to the keyframe before the target and drops earlier frames before colour
+  conversion; the display clock restarts when the first frame is ready (tests/v0.2/02).
 
 ## Rules learned the hard way (keep them)
 
@@ -79,13 +93,19 @@ FFmpeg/NVDEC ─► NV12 (CUDA, our ctx) ─► [queue of 4] ─► Pipeline::pr
 5. **Load the VFX runtime with all its libraries preloaded** (dependencies, `libnvVFX*`, `libnvidia-ngx-*`),
    like NVIDIA's Python loader; then no `LD_LIBRARY_PATH` is needed.
 6. **Score videos by frame number**, not timestamp (Matroska stores whole milliseconds; tests/v0.1/04).
+7. **Compare upscalers against bicubic *inside* Nitid**: the 8-bit RGB working format alone caps PSNR at
+   ~44.8 dB against the YUV source (tests/v0.2/01).
+8. **Start clocks when the first frame is ready**, not when a seek is asked for (tests/v0.2/03).
+9. **Run-time loaded libraries** (VFX, PipeWire) are only used through function tables; libnitid links with
+   `--no-undefined` to catch slips.
 
 ## Where planned features go
 
 | Feature (PLAN phase) | Where | Notes |
 |---|---|---|
-| Audio + A/V sync (1) | `libnitid/src/audio/` + `DisplayClock` driven by the audio clock | FrameSource gains an audio side; clock becomes audio-led |
-| ImGui overlay (1) | `apps/nitid/src/ui/` + an engine overlay hook in `engine.hpp` | engine records the app's draw callback after the blit |
+| Audio + A/V sync (1) | ✅ 0.2: `libnitid/src/audio/` | the picture leads, the sound follows (resampling) |
+| ImGui overlay (1) | ✅ 0.2: `apps/nitid/src/ui/` + `Engine::set_overlay` | dynamic rendering after the blit |
+| NIS / FSR 1 (1) | ✅ 0.2: `gpu/spatial_scaler.*`, `kernels/scale.cu` | CUDA ports; NIS ≤ 2x |
 | Presets, hotkeys, gamepad (5) | presets: `libnitid` (TOML); input: `apps/nitid/src/key_bindings.*` | key table already single-source |
 | TrueHDR / HDR output (2, postponed) | `vfx/true_hdr.*`; HDR10 swapchain in `output/` | Settings gains HDR fields |
 | Screen capture (3) | `input/pipewire_source.*` implementing `FrameSource` | spike S6 code; DMA-BUF → Vulkan → CUDA |
