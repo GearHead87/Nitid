@@ -12,6 +12,8 @@ release workflow puts that section at the top of the GitHub release, followed by
 - **FSR 1 and NIS upscaling** (`--upscale fsr|nis`, `--sharpness 0..1`; `V` cycles VSR / FSR 1 / NIS / off):
   AMD FidelityFX FSR 1 (EASU + RCAS) and NVIDIA Image Scaling, ported to CUDA. Work on any NVIDIA GPU without
   the VFX runtime; 0.06–0.08 ms per 1080p frame. NIS scales up to 2x.
+- **Seeking**: Left / Right ±5 s, PgDn / PgUp ±60 s, Home; `--start` in both apps. Frame-exact; the first frame
+  after a seek takes 11–38 ms at 1080p.
 
 ## [0.1.0] - 2026-11-26
 

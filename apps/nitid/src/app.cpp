@@ -96,6 +96,7 @@ int App::run()
     engine_->set_settings(settings_);
 
     source_ = engine_->open_file(opts_.file, opts_.open);
+    if (opts_.start_s > 0) engine_->seek(opts_.start_s);
     if (opts_.width <= 0 || opts_.height <= 0) {
         // Re-shape the window to the video's aspect ratio within 80% of the screen.
         double s = std::min(usable.w * 0.8 / source_.width, usable.h * 0.8 / source_.height);
@@ -131,6 +132,11 @@ int App::run()
             engine_->capture_next_window_frame(std::format("{}_{:.2f}s.ppm", opts_.capture_prefix, opts_.capture_at.front()));
             opts_.capture_at.erase(opts_.capture_at.begin());
         }
+        if (!opts_.test_seeks.empty() && seconds_since(t_start) >= opts_.test_seeks.front().first) {
+            std::println("test seek: {:.2f} s -> {:.2f} s", engine_->position(), opts_.test_seeks.front().second);
+            engine_->seek(opts_.test_seeks.front().second);
+            opts_.test_seeks.erase(opts_.test_seeks.begin());
+        }
         if (!engine_->render_frame()) {
             ended = true;
             break;
@@ -165,6 +171,11 @@ void App::handle(Action a)
     switch (a) {
         case Action::Quit: running_ = false; return;
         case Action::TogglePause: engine_->set_paused(!engine_->paused()); break;
+        case Action::SeekBack: engine_->seek(engine_->position() - 5); break;
+        case Action::SeekForward: engine_->seek(engine_->position() + 5); break;
+        case Action::SeekBackLong: engine_->seek(engine_->position() - 60); break;
+        case Action::SeekForwardLong: engine_->seek(engine_->position() + 60); break;
+        case Action::SeekStart: engine_->seek(0); break;
         case Action::ToggleFullscreen:
             fullscreen_ = !fullscreen_;
             SDL_SetWindowFullscreen(window_, fullscreen_);

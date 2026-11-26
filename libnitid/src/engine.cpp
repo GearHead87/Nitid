@@ -12,8 +12,11 @@
 #include "pipeline/pipeline.hpp"
 #include "vfx/vfx_api.hpp"
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstring>
+#include <optional>
 
 namespace nitid {
 
@@ -38,6 +41,7 @@ struct Engine::Impl {
     pipeline::DisplayClock clock;
     std::optional<pipeline::Output> last_output;
     double last_position = -1;
+    std::optional<std::chrono::steady_clock::time_point> seek_started;  // logs how long a seek took
 
     Size headless_box;
     int64_t headless_n = 0;
@@ -203,6 +207,25 @@ void Engine::reset_stats()
 void Engine::set_paused(bool p) { impl_->paused = p; }
 bool Engine::paused() const noexcept { return impl_->paused; }
 
+void Engine::seek(double seconds)
+{
+    Impl& m = *impl_;
+    if (!m.source) return;
+    const auto& info = m.source->info();
+    double last = info.duration_s > 0 ? std::max(0.0, info.duration_s - 1.0 / info.fps) : seconds;
+    seconds = std::clamp(seconds, 0.0, last);
+    m.cuda->make_current();
+    m.seek_started = std::chrono::steady_clock::now();
+    m.source->seek(seconds);
+    m.pipe->restart();
+    m.clock.seek(seconds);
+    m.last_output.reset();
+    m.position_s = seconds;
+    m.headless_n = int64_t(std::llround(seconds * info.fps * std::max(1, m.effective_multiplier(false))));
+}
+
+double Engine::position() const noexcept { return impl_->position_s; }
+
 void Engine::attach_window(const WindowTarget& target)
 {
     Impl& m = *impl_;
@@ -259,6 +282,10 @@ bool Engine::render_frame()
     m.last_output = out;
     m.last_position = position;
     m.position_s = position / fps;
+    if (m.seek_started) {
+        log::info("seek to {:.3f} s: first frame ready after {:.0f} ms", m.position_s, ms_since(*m.seek_started));
+        m.seek_started.reset();
+    }
     m.output_ms.add(m.presenter->present(out->ptr, out->size));
     m.count_output();
     return true;

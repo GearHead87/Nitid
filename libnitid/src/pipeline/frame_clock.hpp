@@ -30,7 +30,9 @@ class DisplayClock {
 public:
     static constexpr double kMaxCatchUpS = 0.25;
 
-    void reset() { media_s_ = 0, debt_s_ = 0, started_ = false; }
+    void reset() { seek(0); }
+    // Continue from media time `s`; the next tick returns exactly `s`.
+    void seek(double s) { media_s_ = s, debt_s_ = 0, started_ = false; }
 
     // Call once per display refresh. Returns the media time (seconds) for this refresh.
     //

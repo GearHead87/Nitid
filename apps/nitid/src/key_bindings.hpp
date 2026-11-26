@@ -13,6 +13,11 @@ namespace nitid_app {
 enum class Action {
     Quit,
     TogglePause,
+    SeekBack,
+    SeekForward,
+    SeekBackLong,
+    SeekForwardLong,
+    SeekStart,
     ToggleFullscreen,
     CycleUpscaler,
     CycleUpscalerQuality,

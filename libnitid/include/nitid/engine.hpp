@@ -61,6 +61,11 @@ public:
     void set_paused(bool paused);
     bool paused() const noexcept;
 
+    // Jumps to `seconds` (clamped to the source; frame-exact). Playback continues from there (or stays paused,
+    // showing that frame). Takes from a few ms to ~0.3 s (decoding from the keyframe before the target).
+    void seek(double seconds);
+    double position() const noexcept;  // seconds
+
     // --- Window output -------------------------------------------------------------------------
     // Shows frames in the app's window, paced to its refresh rate (Vulkan FIFO).
     void attach_window(const WindowTarget& target);

@@ -31,6 +31,7 @@ struct BenchOptions {
     bool hw_decode = true;
     bool verbose = false;
     float sharpness = 0.5f;
+    double start = 0;
 };
 
 int run(const BenchOptions& o)
@@ -56,6 +57,7 @@ int run(const BenchOptions& o)
         return 2;
     }
     engine->set_headless_output(bw, bh);
+    if (o.start > 0) engine->seek(o.start);
     const uint32_t ow = engine->headless_width(), oh = engine->headless_height();
     const double out_fps = engine->headless_fps();
 
@@ -131,6 +133,7 @@ Runner add_bench_command(CLI::App& app)
     cmd->add_option("--size", o->size, "Output box WxH (upscaling fits the video into it)");
     cmd->add_option("--scale", o->scale, "Output box = source size x this (when --size is not given)")->capture_default_str();
     cmd->add_option("--source-step", o->source_step, "Use only every Nth frame of the file")->check(CLI::Range(1, 16));
+    cmd->add_option("--start", o->start, "Start at this time in seconds");
     cmd->add_option("--frames", o->frames, "Stop after this many output frames");
     cmd->add_option("--output,-o", o->output, "Save the output video (H.264 CRF 12, or FFV1 with --lossless)");
     cmd->add_flag("--lossless", o->lossless, "Save with FFV1 (exact, large)");

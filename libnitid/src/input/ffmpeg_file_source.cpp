@@ -80,8 +80,12 @@ struct FfmpegFileSource::Ffmpeg {
     AVPacket* pkt = nullptr;
     AVFrame* frame = nullptr;
     AVFrame* sw = nullptr;
-    int64_t decoded = 0;  // frames out of the decoder since (re)start
-    int64_t kept = 0;     // frames delivered (after source_step)
+    int64_t decoded = 0;  // file frame number of the next decoder output (before source_step)
+    // After a seek: the decoder restarts at a keyframe before the target. The first frame's timestamp sets
+    // `decoded`; frames before `first_wanted` (a file frame number) are dropped before colour conversion.
+    bool resync = false;
+    int64_t first_wanted = 0;
+    double native_fps = 30;
 
     ~Ffmpeg()
     {
@@ -157,6 +161,7 @@ FfmpegFileSource::FfmpegFileSource(const std::string& path, const OpenOptions& o
 
     AVRational fr = st->avg_frame_rate.num ? st->avg_frame_rate : st->r_frame_rate;
     double fps = fr.num && fr.den ? av_q2d(fr) : 30.0;
+    f.native_fps = fps;
     info_.name = std::filesystem::path(path).filename().string();
     info_.codec = codec->name;
     info_.decoder = decoder;
@@ -196,13 +201,24 @@ void FfmpegFileSource::stop_thread()
     if (thread_.joinable()) thread_.join();
 }
 
-void FfmpegFileSource::restart()
+void FfmpegFileSource::seek(double seconds)
 {
     stop_thread();
     Ffmpeg& f = *ff_;
-    av_seek_frame(f.fmt, f.stream, 0, AVSEEK_FLAG_BACKWARD);
+    AVStream* st = f.fmt->streams[f.stream];
+    const int64_t index = std::max<int64_t>(0, std::llround(seconds * info_.fps));  // playback frame number
+    f.first_wanted = index * opts_.source_step;                                     // file frame number
+    f.decoded = 0;
+    f.resync = f.first_wanted > 0;
+    const int64_t start = st->start_time != AV_NOPTS_VALUE ? st->start_time : 0;
+    const int64_t ts = start + av_rescale_q(f.first_wanted, av_inv_q(av_d2q(f.native_fps, 1 << 20)), st->time_base);
+    if (f.first_wanted == 0) {
+        av_seek_frame(f.fmt, f.stream, start, AVSEEK_FLAG_BACKWARD);
+    } else if (av_seek_frame(f.fmt, f.stream, ts, AVSEEK_FLAG_BACKWARD) < 0) {
+        log::warn("seek to {:.3f} s failed; decoding from the start", seconds);
+        av_seek_frame(f.fmt, f.stream, start, AVSEEK_FLAG_BACKWARD);
+    }
     avcodec_flush_buffers(f.dec);
-    f.decoded = f.kept = 0;
     cuts_.reset();
     start_thread();
 }
@@ -274,9 +290,21 @@ void FfmpegFileSource::decode_loop()
     Ffmpeg& f = *ff_;
     if (ctx_) cuCtxSetCurrent(ctx_);
     bool eof = false;
+    AVStream* st = f.fmt->streams[f.stream];
+    const int64_t start_ts = st->start_time != AV_NOPTS_VALUE ? st->start_time : 0;
     auto handle_frame = [&](AVFrame* fr) -> bool {
         auto t0 = SteadyClock::now();
-        bool keep = (f.decoded++ % opts_.source_step) == 0;
+        if (f.resync) {
+            // First frame after a seek: its timestamp says which file frame it is.
+            f.resync = false;
+            if (fr->best_effort_timestamp != AV_NOPTS_VALUE)
+                f.decoded = std::llround(double(fr->best_effort_timestamp - start_ts) * av_q2d(st->time_base) * f.native_fps);
+            else
+                f.decoded = f.first_wanted;  // no timestamps: trust the seek
+        }
+        const int64_t n = f.decoded++;
+        if (n < f.first_wanted) return true;  // before the seek target: decoded, not delivered
+        bool keep = (n % opts_.source_step) == 0;
         if (!keep) return true;
         AVFrame* src = fr;
         if (fr->format == AV_PIX_FMT_CUDA && ctx_) {
@@ -289,7 +317,7 @@ void FfmpegFileSource::decode_loop()
                 return false;
             }
             if (done) {
-                out.index = f.kept++;
+                out.index = n / opts_.source_step;
                 out.time_s = double(out.index) / info_.fps;
                 if (out.scene_cut)
                     log::debug("scene cut at frame {} (histogram {:.2f}, thumbnail {:.2f})", out.index, cuts_.last_score(),
@@ -347,7 +375,7 @@ void FfmpegFileSource::decode_loop()
         uint8_t* dst[4] = {out.rgba.data(), nullptr, nullptr, nullptr};
         int dst_stride[4] = {int(out.width * 4), 0, 0, 0};
         sws_scale(f.sws, src->data, src->linesize, 0, src->height, dst, dst_stride);
-        out.index = f.kept++;
+        out.index = n / opts_.source_step;
         out.time_s = double(out.index) / info_.fps;
         out.scene_cut = detect_cuts_ && cuts_.push(out.rgba.data(), out.width, out.height);
         if (out.scene_cut)

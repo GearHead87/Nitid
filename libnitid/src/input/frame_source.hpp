@@ -30,8 +30,11 @@ public:
     virtual std::optional<DecodedFrame> next() = 0;
     // Gives a frame's pixel buffers back for reuse (avoids reallocating every frame).
     virtual void recycle(DecodedFrame&& frame) = 0;
+    // Continue from the frame at `seconds` (frame-exact: frames before it are decoded but not delivered).
+    // The next frame's index is round(seconds * fps).
+    virtual void seek(double seconds) = 0;
     // Start again from the beginning.
-    virtual void restart() = 0;
+    void restart() { seek(0); }
 };
 
 } // namespace nitid::input

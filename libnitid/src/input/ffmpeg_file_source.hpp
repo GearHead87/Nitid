@@ -37,7 +37,7 @@ public:
     const SourceInfo& info() const override { return info_; }
     std::optional<DecodedFrame> next() override;
     void recycle(DecodedFrame&& frame) override;
-    void restart() override;
+    void seek(double seconds) override;
 
     void set_scene_cut_detection(bool on) { detect_cuts_ = on; }
 
