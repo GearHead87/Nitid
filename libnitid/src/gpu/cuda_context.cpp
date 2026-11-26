@@ -33,7 +33,11 @@ CudaContext::CudaContext(const std::array<uint8_t, 16>& uuid)
     // A *blocking* stream (synchronises with CUDA's legacy default stream). The VFX SDK does part of its
     // work on the default stream; with a non-blocking stream VSR returned the previous frame's result
     // (tests/v0.1/02-upscaling).
-    NITID_CU(cuStreamCreate(&stream, CU_STREAM_DEFAULT));
+    // Lowest priority: the presenter's copies (own stream, highest priority) go first, so a long frame-generation
+    // burst doesn't make the display miss a refresh (tests/v0.3/01).
+    int least = 0, greatest = 0;
+    NITID_CU(cuCtxGetStreamPriorityRange(&least, &greatest));
+    NITID_CU(cuStreamCreateWithPriority(&stream, CU_STREAM_DEFAULT, least));
     log::debug("CUDA device {} matched to the Vulkan GPU", int(device));
 }
 

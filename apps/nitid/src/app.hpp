@@ -41,6 +41,8 @@ struct AppOptions {
     std::vector<std::pair<double, double>> test_seeks;
     // Test hook: pause while playing. Each entry: {seconds since start of the run, pause length in seconds}.
     std::vector<std::pair<double, double>> test_pauses;
+    // Test hook: press keys while playing. Each entry: {seconds since start of the run, SDL key name, e.g. "H"}.
+    std::vector<std::pair<double, std::string>> test_keys;
     // Test hook: open these panels at start ("settings", "stats", "help").
     std::vector<std::string> test_panels;
 };

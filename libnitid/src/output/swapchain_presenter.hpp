@@ -71,6 +71,9 @@ private:
 
     gpu::VulkanContext& vk_;
     gpu::CudaContext& cuda_;
+    // Own stream for the copy into the shared buffer: the render-ahead worker keeps the pipeline's stream busy,
+    // and presenting must not wait for its frame generation.
+    CUstream stream_ = nullptr;
     VkSurfaceKHR surface_;
     pipeline::Size window_;
     bool dirty_ = false;

@@ -240,6 +240,16 @@ int App::run()
             engine_->seek(opts_.test_seeks.front().second);
             opts_.test_seeks.erase(opts_.test_seeks.begin());
         }
+        if (!opts_.test_keys.empty() && now >= opts_.test_keys.front().first) {
+            const std::string& name = opts_.test_keys.front().second;
+            if (auto a = action_for_key(SDL_GetKeyFromName(name.c_str()))) {
+                std::println("test key {} at {:.2f} s", name, engine_->position());
+                handle(*a);
+            } else {
+                std::println(stderr, "test key {}: no action", name);
+            }
+            opts_.test_keys.erase(opts_.test_keys.begin());
+        }
         if (!opts_.test_pauses.empty()) {
             auto& [at, len] = opts_.test_pauses.front();
             if (!engine_->paused() && now >= at) {

@@ -106,6 +106,7 @@ add_library(libnitid
   src/vfx/frame_gen.cpp
   # pipeline: upscale -> frame generation, frame selection
   src/pipeline/pipeline.cpp
+  src/pipeline/render_ahead.cpp  # window output: pipeline on its own thread, ahead of the display
   # output: window presenter (recording and virtual camera later)
   src/output/swapchain_presenter.cpp
 )

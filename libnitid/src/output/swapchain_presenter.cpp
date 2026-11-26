@@ -37,6 +37,9 @@ SwapchainPresenter::SwapchainPresenter(gpu::VulkanContext& vk, gpu::CudaContext&
                                        pipeline::Size window)
     : vk_(vk), cuda_(cuda), surface_(surface), window_(window)
 {
+    int least = 0, greatest = 0;
+    NITID_CU(cuCtxGetStreamPriorityRange(&least, &greatest));
+    NITID_CU(cuStreamCreateWithPriority(&stream_, CU_STREAM_NON_BLOCKING, greatest));
     if (vk_.present_wait)
         wait_for_present_ = reinterpret_cast<PFN_vkWaitForPresentKHR>(vkGetDeviceProcAddr(vk_.device, "vkWaitForPresentKHR"));
     VkCommandBufferAllocateInfo ai{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
@@ -57,7 +60,7 @@ SwapchainPresenter::SwapchainPresenter(gpu::VulkanContext& vk, gpu::CudaContext&
 SwapchainPresenter::~SwapchainPresenter()
 {
     vkDeviceWaitIdle(vk_.device);
-    cuda_.sync();
+    cuStreamSynchronize(stream_);
     destroy_swapchain();
     for (auto& s : slots_) {
         free_slot_image(s);
@@ -66,6 +69,7 @@ SwapchainPresenter::~SwapchainPresenter()
         vkDestroyFence(vk_.device, s.fence, nullptr);
         vkFreeCommandBuffers(vk_.device, vk_.pool, 1, &s.cmd);
     }
+    cuStreamDestroy(stream_);
     vkDestroySurfaceKHR(vk_.instance, surface_, nullptr);
 }
 
@@ -234,9 +238,9 @@ double SwapchainPresenter::present(CUdeviceptr frame, pipeline::Size size)
     if (has_frame) {
         ensure_slot_size(s, size);
         auto t0 = SteadyClock::now();
-        NITID_CU(cuMemcpyDtoDAsync(s.buffer->ptr(), frame, size_t(size.w) * size.h * 4, cuda_.stream));
-        s.ready->cuda_signal(cuda_.stream);
-        cuda_.sync();
+        NITID_CU(cuMemcpyDtoDAsync(s.buffer->ptr(), frame, size_t(size.w) * size.h * 4, stream_));
+        s.ready->cuda_signal(stream_);
+        NITID_CU(cuStreamSynchronize(stream_));
         copy_ms = ms_since(t0);
     }
 

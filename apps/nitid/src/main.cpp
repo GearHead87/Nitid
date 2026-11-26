@@ -61,6 +61,9 @@ int main(int argc, char** argv)
     std::vector<std::string> test_seeks;
     cli.add_option("--test-seek", test_seeks, "Tests: seek while playing, AT:TO = after AT s of the run, go to TO s")
         ->expected(1, -1);
+    std::vector<std::string> test_keys;
+    cli.add_option("--test-key", test_keys, "Tests: press a key while playing, AT:KEY = after AT s of the run (SDL key name)")
+        ->expected(1, -1);
     std::vector<std::string> test_pauses;
     cli.add_option("--test-pause", test_pauses, "Tests: pause while playing, AT:LEN = after AT s of the run, for LEN s")
         ->expected(1, -1);
@@ -91,6 +94,15 @@ int main(int argc, char** argv)
         o.test_pauses.emplace_back(at, len);
     }
     std::sort(o.test_pauses.begin(), o.test_pauses.end());
+    for (const auto& t : test_keys) {
+        auto colon = t.find(':');
+        if (colon == std::string::npos) {
+            std::println(stderr, "--test-key wants AT:KEY, got {}", t);
+            return 2;
+        }
+        o.test_keys.emplace_back(std::stod(t.substr(0, colon)), t.substr(colon + 1));
+    }
+    std::sort(o.test_keys.begin(), o.test_keys.end());
     try {
         nitid_app::App app(std::move(o));
         return app.run();

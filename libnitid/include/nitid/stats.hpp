@@ -39,6 +39,10 @@ struct Stats {
     std::uint64_t skipped_frames = 0;     // real frames never shown because playback fell behind
     std::uint64_t missed_refreshes = 0;   // window output: displayed later than one refresh
     std::uint64_t scene_cuts = 0;
+    std::uint64_t late_frames = 0;        // window output: refreshes where a due frame was not ready in time
+    // Frame gen one-per-refresh mode: a new frame every `frame_gen_stride` refreshes (1 = every refresh; more when
+    // frame generation takes longer than a refresh). 0 = not in that mode.
+    int frame_gen_stride = 0;
 
     double position_s = 0;                // playback position
     StageTimes avg;

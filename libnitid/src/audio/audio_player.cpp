@@ -79,6 +79,8 @@ struct AudioPlayer::Impl {
     double user_delay = 0;
     double err_ema = 0;
     bool err_init = false;
+    int samples_since_resync = 0;    // sync() calls since the last resync
+    int64_t resync_wall = 0;         // when the last resync happened
     double latency_s = 0;
     AudioStats st;
 
@@ -257,6 +259,8 @@ struct AudioPlayer::Impl {
             resync = false;
             frac = 0;
             err_init = false;
+            samples_since_resync = 0;
+            resync_wall = play_wall;
             ++st.resyncs;
         }
         uint32_t i = uint32_t(std::min<size_t>(n, silence_pending));
@@ -447,6 +451,13 @@ void AudioPlayer::sync(double media_s, int64_t when_ns)
     }
     const double r = sync_ratio(m.err_ema);
     if (r == 0 || std::fabs(err) > 0.1) {  // the smoothed value lags: big jumps resync at once
+        m.resync = true;
+        return;
+    }
+    // Settling: right after a resync the picture can still move by a few frames (first frames after loading
+    // are slow). If the gap is still clearly there once the error has settled, line up again instead of
+    // resampling it away over seconds.
+    if (++m.samples_since_resync == 30 && std::fabs(m.err_ema) > kSettleError && when_ns - m.resync_wall < 2'000'000'000) {
         m.resync = true;
         return;
     }

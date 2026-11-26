@@ -26,6 +26,14 @@ inline FramePick pick(double position, int multiplier)
     return {int64_t(f), float(ph)};
 }
 
+// Frame-gen pacing: how many refreshes one generated frame may take. A frame that costs more than 95 % of the time
+// it has would miss the display now and then; prepare one every `stride` refreshes instead (evenly paced).
+inline int frame_gen_stride(double frame_ms, double period_s, int max_stride)
+{
+    if (period_s <= 0 || frame_ms <= 0) return 1;
+    return std::clamp(int(std::ceil(frame_ms / (0.95 * period_s * 1000))), 1, max_stride);
+}
+
 class DisplayClock {
 public:
     static constexpr double kMaxCatchUpS = 0.25;

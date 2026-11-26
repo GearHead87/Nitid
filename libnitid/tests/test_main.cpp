@@ -214,6 +214,19 @@ void test_settings()
     CHECK((upscale_target({960, 540}, {3840, 2160}) == Size{3840, 2160}));
 }
 
+void test_stride()
+{
+    const double p = 1.0 / 165;  // 6.06 ms
+    CHECK(frame_gen_stride(1.4, p, 4) == 1);   // MEDIUM: every refresh
+    CHECK(frame_gen_stride(5.7, p, 4) == 1);   // just under 95 %
+    CHECK(frame_gen_stride(5.8, p, 4) == 2);
+    CHECK(frame_gen_stride(10.1, p, 4) == 2);  // HIGH at 1080p: every 2nd refresh
+    CHECK(frame_gen_stride(12.0, p, 4) == 3);
+    CHECK(frame_gen_stride(80.0, p, 4) == 4);  // capped
+    CHECK(frame_gen_stride(10.0, 1.0 / 60, 4) == 1);  // 60 Hz display: 16.7 ms per refresh
+    CHECK(frame_gen_stride(0, p, 4) == 1);
+}
+
 void test_av_sync()
 {
     using audio::sync_ratio;
@@ -248,6 +261,7 @@ int main()
     test_queue();
     test_settings();
     test_av_sync();
+    test_stride();
     std::printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

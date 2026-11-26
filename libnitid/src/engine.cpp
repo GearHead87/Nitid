@@ -11,6 +11,7 @@
 #include "output/swapchain_presenter.hpp"
 #include "pipeline/frame_clock.hpp"
 #include "pipeline/pipeline.hpp"
+#include "pipeline/render_ahead.hpp"
 #include "vfx/vfx_api.hpp"
 
 #include <algorithm>
@@ -45,9 +46,8 @@ struct Engine::Impl {
     bool paused = false;
     double refresh_hz = 60;
     pipeline::DisplayClock clock;
-    std::optional<pipeline::Output> last_output;
-    uint64_t last_output_gen = 0;  // pipeline generation last_output belongs to
-    double last_position = -1;
+    std::unique_ptr<pipeline::RenderAhead> ahead;  // window output: the pipeline runs on its own thread
+    bool waiting_first = false;                     // after open / seek: waiting for the worker's first frame
     std::optional<std::chrono::steady_clock::time_point> seek_started;  // logs how long a seek took
 
     Size headless_box;
@@ -118,6 +118,7 @@ Engine::~Engine()
 {
     if (!impl_) return;
     // Order matters: stop decoding, release GPU users, then the contexts.
+    impl_->ahead.reset();  // stops the worker before the pipeline goes
     impl_->audio.reset();
     impl_->pipe.reset();
     impl_->source.reset();
@@ -156,7 +157,6 @@ SourceInfo Engine::open_file(const std::string& path, const OpenOptions& options
     m.pipe = std::make_unique<pipeline::Pipeline>(*m.cuda, m.vfx, m.caps.super_res, m.caps.frame_gen);
     m.pipe->set_source(m.source.get());
     m.clock.reset();
-    m.last_output.reset();
     m.headless_n = 0;
     m.info = m.source->info();
     if (!m.presenter) {
@@ -178,6 +178,12 @@ SourceInfo Engine::open_file(const std::string& path, const OpenOptions& options
             log::info("No sound: {}", note);
         }
     }
+    if (m.presenter) {
+        m.ahead = std::make_unique<pipeline::RenderAhead>(*m.cuda, *m.pipe);
+        m.ahead->configure(m.presenter->window_size(), m.settings);
+        m.ahead->start(0, m.info.fps / m.refresh_hz);
+        m.waiting_first = true;
+    }
     reset_stats();
     return m.info;
 }
@@ -185,10 +191,10 @@ SourceInfo Engine::open_file(const std::string& path, const OpenOptions& options
 void Engine::close_source()
 {
     Impl& m = *impl_;
+    m.ahead.reset();
     m.audio.reset();
     m.pipe.reset();
     m.source.reset();
-    m.last_output.reset();
 }
 
 bool Engine::has_source() const noexcept { return impl_->source != nullptr; }
@@ -197,7 +203,6 @@ void Engine::set_settings(const Settings& s)
 {
     impl_->settings = s;
     if (impl_->source) impl_->source->set_scene_cut_detection(s.scene_cut_detection);
-    impl_->last_output.reset();
 }
 
 const Settings& Engine::settings() const noexcept { return impl_->settings; }
@@ -206,7 +211,8 @@ Stats Engine::stats() const
 {
     const Impl& m = *impl_;
     Stats s;
-    if (m.pipe) m.pipe->fill_stats(s);
+    if (m.ahead) m.ahead->fill_stats(s);
+    else if (m.pipe) m.pipe->fill_stats(s);
     if (m.source) s.source_fps = m.source->info().fps;
     s.display_hz = m.presenter ? m.refresh_hz : 0;
     s.output_frames = m.output_frames;
@@ -238,7 +244,8 @@ Stats Engine::stats() const
 void Engine::reset_stats()
 {
     Impl& m = *impl_;
-    if (m.pipe) m.pipe->reset_stats();
+    if (m.ahead) m.ahead->reset_stats();  // the worker resets the pipeline's counters
+    else if (m.pipe) m.pipe->reset_stats();
     if (m.presenter) m.presenter->reset_stats();
     m.output_ms.reset();
     m.output_frames = 0;
@@ -283,11 +290,15 @@ void Engine::seek(double seconds)
     seconds = std::clamp(seconds, 0.0, last);
     m.cuda->make_current();
     m.seek_started = std::chrono::steady_clock::now();
+    if (m.ahead) m.ahead->stop();  // the worker must not be inside the pipeline while it restarts
     m.source->seek(seconds);
     if (m.audio) m.audio->seek(seconds);
     m.pipe->restart();
     m.clock.seek(seconds);
-    m.last_output.reset();
+    if (m.ahead) {
+        m.ahead->start(seconds * info.fps, info.fps / m.refresh_hz);
+        m.waiting_first = true;
+    }
     m.position_s = seconds;
     m.headless_n = int64_t(std::llround(seconds * info.fps * std::max(1, m.effective_multiplier(false))));
 }
@@ -326,50 +337,62 @@ bool Engine::render_frame()
         m.presenter->present(0, {});
         return true;
     }
-    m.pipe->configure(m.presenter->window_size(), m.settings);
-    double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
-    double t = m.clock.tick(now, 1.0 / m.refresh_hz, m.paused);
-    double fps = m.source->info().fps;
-    double position = t * fps;
-    int mult = m.effective_multiplier(true);
+    const double fps = m.source->info().fps;
+    const double period = 1.0 / m.refresh_hz;
+    const double step = fps * period;  // source frames per refresh
+    m.ahead->configure(m.presenter->window_size(), m.settings);
 
-    if (m.last_output && m.pipe->generation() != m.last_output_gen) m.last_output.reset();  // buffers reallocated
-    std::optional<pipeline::Output> out;
-    if (m.paused && m.last_output && position == m.last_position) {
-        out = m.last_output;  // nothing moves while paused: don't regenerate
-    } else {
-        out = m.pipe->produce(position, mult);
-        if (!out && m.open_options.loop) {
-            seek(0);  // same path as a user seek: sound and clock restart with the first frame
-            position = 0;
-            out = m.pipe->produce(0, mult);
+    // After open / seek: keep showing the old picture until the worker has the first new frame, then start the
+    // clock from that frame (so neither the picture nor the sound jumps ahead by the decoding time).
+    if (m.waiting_first) {
+        auto f = m.ahead->wait_first(m.ahead->shown() ? 4 : 30);
+        if (!f) {
+            auto old = m.ahead->shown();
+            m.output_ms.add(m.presenter->present(old ? old->ptr : 0, old ? old->size : pipeline::Size{}));
+            if (m.ahead->finished()) return end_of_source();
+            return true;
+        }
+        m.waiting_first = false;
+        m.clock.seek(f->pos / fps);
+        if (m.seek_started) {
+            log::info("seek to {:.3f} s: first frame ready after {:.0f} ms", f->pos / fps, ms_since(*m.seek_started));
+            m.seek_started.reset();
         }
     }
-    if (!out) {
-        // End of the source: keep showing the last frame (and the app's overlay) until it seeks or closes.
-        if (m.last_output) m.presenter->present(m.last_output->ptr, m.last_output->size);
-        else m.presenter->present(0, {});
-        return false;
+
+    const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    const double pos = m.clock.tick(now, period, m.paused) * fps;
+    auto f = m.ahead->take(pos, step, period);
+    if (!f) {
+        m.presenter->present(0, {});
+        return true;
     }
-    m.last_output = out;
-    m.last_output_gen = m.pipe->generation();
-    m.last_position = position;
-    m.position_s = position / fps;
-    if (m.seek_started) {
-        log::info("seek to {:.3f} s: first frame ready after {:.0f} ms", m.position_s, ms_since(*m.seek_started));
-        m.seek_started.reset();
-        // Start the clock when the first frame is ready, not when the seek began: otherwise the picture would
-        // jump ahead by the decoding time and the sound (lined up with this frame) would lag by as much.
-        m.clock.seek(m.position_s);
-    }
+    if (m.ahead->finished() && pos >= f->pos + 1.0) return end_of_source();
+
+    m.position_s = f->pos / fps;
     if (m.audio) {
-        // This frame reaches the screen about display_latency after present(): the sound for it should too.
+        // What is on screen about display_latency after present() is the display clock's time; the sound follows
+        // the clock (smooth), not the frame grid (with a frame-gen stride the frame is up to stride-1 refreshes
+        // older than the clock).
         auto when = std::chrono::steady_clock::now() + std::chrono::duration<double>(m.presenter->display_latency_s());
-        m.audio->sync(m.position_s, std::chrono::duration_cast<std::chrono::nanoseconds>(when.time_since_epoch()).count());
+        m.audio->sync(pos / fps, std::chrono::duration_cast<std::chrono::nanoseconds>(when.time_since_epoch()).count());
     }
-    m.output_ms.add(m.presenter->present(out->ptr, out->size));
+    m.output_ms.add(m.presenter->present(f->ptr, f->size));
     m.count_output();
     return true;
+}
+
+bool Engine::end_of_source()
+{
+    Impl& m = *impl_;
+    if (m.open_options.loop) {
+        seek(0);
+        return render_frame();
+    }
+    // Keep showing the last frame (and the app's overlay) until the app seeks or closes.
+    auto last = m.ahead->shown();
+    m.presenter->present(last ? last->ptr : 0, last ? last->size : pipeline::Size{});
+    return false;
 }
 
 void Engine::set_overlay(OverlayCallback overlay)

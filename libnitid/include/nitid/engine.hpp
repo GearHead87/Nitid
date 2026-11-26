@@ -102,6 +102,7 @@ public:
 
 private:
     Engine();
+    bool end_of_source();
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

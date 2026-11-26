@@ -20,7 +20,9 @@ std::string upscaler_text(const nitid::Settings& s, const nitid::Stats& st)
 std::string frame_gen_text(const nitid::Settings& s, const nitid::Stats& st)
 {
     if (st.frame_gen_active)
-        return std::format("FG {} {} {:.2f} ms", nitid::to_string(s.frame_gen_quality), multiplier_text(s), st.avg.frame_gen_ms);
+        return std::format("FG {} {}{} {:.2f} ms", nitid::to_string(s.frame_gen_quality), multiplier_text(s),
+                           st.frame_gen_stride > 1 ? std::format(" (every {} refreshes)", st.frame_gen_stride) : "",
+                           st.avg.frame_gen_ms);
     return std::format("FG off ({})", st.frame_gen_note);
 }
 
@@ -45,11 +47,11 @@ std::string audio_text(const nitid::Stats& st)
 std::string stats_line(const nitid::Settings& s, const nitid::Stats& st)
 {
     return std::format("t={:.1f}s | {}x{}@{:.3f} -> {}x{} (window {}x{} @ {:.0f} Hz) | {} | {} | out {:.1f} fps | "
-                       "frames {} (generated {}) | skipped {} | missed refreshes {} | cuts {} | {}",
+                       "frames {} (generated {}) | skipped {} | late {} | missed refreshes {} | cuts {} | {}",
                        st.position_s, st.source_width, st.source_height, st.source_fps, st.work_width, st.work_height,
                        st.output_width, st.output_height, st.display_hz, upscaler_text(s, st), frame_gen_text(s, st),
-                       st.output_fps, st.output_frames, st.generated_frames, st.skipped_frames, st.missed_refreshes,
-                       st.scene_cuts, audio_text(st));
+                       st.output_fps, st.output_frames, st.generated_frames, st.skipped_frames, st.late_frames,
+                       st.missed_refreshes, st.scene_cuts, audio_text(st));
 }
 
 std::string stats_report(const nitid::SourceInfo& src, const nitid::Settings& s, const nitid::Stats& st)
@@ -64,7 +66,8 @@ std::string stats_report(const nitid::SourceInfo& src, const nitid::Settings& s,
     r += std::format("Played:   {:.1f} s, {} output frames ({} generated), {} real frames shown, {} skipped, "
                      "{} scene cuts\n",
                      st.position_s, st.output_frames, st.generated_frames, st.source_frames, st.skipped_frames, st.scene_cuts);
-    r += std::format("Display:  {:.1f} fps measured, {} missed refreshes\n", st.output_fps, st.missed_refreshes);
+    r += std::format("Display:  {:.1f} fps measured, {} missed refreshes, {} late frames\n", st.output_fps,
+                     st.missed_refreshes, st.late_frames);
     r += std::format("Sound:    {}\n", audio_text(st));
     r += std::format("Avg ms:   decode+convert {:.2f} | upload {:.2f} | upscale {:.2f} | frame gen {:.2f} | output {:.2f}\n",
                      st.avg.decode_ms, st.avg.upload_ms, st.avg.upscale_ms, st.avg.frame_gen_ms, st.avg.output_ms);
