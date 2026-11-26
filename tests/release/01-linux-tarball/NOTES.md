@@ -32,6 +32,13 @@ through PipeWire in sync (A/V +2.3 ms, Bluetooth headphones 225 ms), seek to 30 
 open-file screen runs, 165 fps. Release vs developer build: **identical frames** for VSR + frame gen 2x and for
 FSR 1 after a seek. (lq_540p had 26 missed refreshes in its single 6 s run; the others 0.)
 
+## 0.3.0 (2026-11-26)
+
+[output-2026-11-26-v0.3.0.md](output-2026-11-26-v0.3.0.md): tarball 12 MB, checks pass. On the GPU: frame gen
+HIGH + compare view with render-ahead pacing (one frame every 2 refreshes, 165 fps, 2 missed refreshes in 8 s),
+sound in sync (A/V −0.7 ms), seek + FSR 1, open screen. Release vs developer build: identical frames (the same
+checksums as 0.2.0: the headless pipeline did not change).
+
 ## Findings
 
 - **NVIDIA's `nvidia-vfx` wheel is only on pypi.nvidia.com.** On PyPI there is just a 3.7 KB stub source
