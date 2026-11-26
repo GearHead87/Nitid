@@ -44,6 +44,15 @@ std::string_view to_string(Cleanup c) noexcept
     return "?";
 }
 
+std::string_view to_string(LiveMode m) noexcept
+{
+    switch (m) {
+        case LiveMode::LowLatency: return "low latency";
+        case LiveMode::Smooth: return "smooth";
+    }
+    return "?";
+}
+
 std::string_view to_string(FrameGenQuality q) noexcept
 {
     switch (q) {

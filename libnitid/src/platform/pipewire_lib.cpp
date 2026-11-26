@@ -39,7 +39,12 @@ void load()
               sym(h, "pw_stream_connect", lib.stream_connect) && sym(h, "pw_stream_destroy", lib.stream_destroy) &&
               sym(h, "pw_stream_dequeue_buffer", lib.stream_dequeue_buffer) &&
               sym(h, "pw_stream_queue_buffer", lib.stream_queue_buffer) &&
-              sym(h, "pw_stream_get_time_n", lib.stream_get_time_n) && sym(h, "pw_stream_get_state", lib.stream_get_state);
+              sym(h, "pw_stream_get_time_n", lib.stream_get_time_n) && sym(h, "pw_stream_get_state", lib.stream_get_state) &&
+              sym(h, "pw_context_new", lib.context_new) && sym(h, "pw_context_destroy", lib.context_destroy) &&
+              sym(h, "pw_context_connect", lib.context_connect) && sym(h, "pw_context_connect_fd", lib.context_connect_fd) &&
+              sym(h, "pw_core_disconnect", lib.core_disconnect) && sym(h, "pw_stream_new", lib.stream_new) &&
+              sym(h, "pw_stream_add_listener", lib.stream_add_listener) &&
+              sym(h, "pw_stream_update_params", lib.stream_update_params);
     if (!ok) return;  // keep the handle: harmless, and some symbols may already be referenced
     lib.init(nullptr, nullptr);
     lib.version = lib.get_library_version();

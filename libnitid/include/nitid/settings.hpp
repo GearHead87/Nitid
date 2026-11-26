@@ -36,6 +36,12 @@ enum class FrameGen : std::uint8_t {
 // VFX Video Frame Generation modes (values match the SDK's Mode).
 enum class FrameGenQuality : std::uint8_t { Low = 0, Medium = 1, High = 2 };
 
+// Live input (screen capture): how frames are shown.
+enum class LiveMode : std::uint8_t {
+    LowLatency,  // the newest captured frame, as soon as it is ready (frame generation not used)
+    Smooth,      // frame generation between the last two captured frames: smoother motion, ~one frame later
+};
+
 // Everything the user can change while playing. Cheap to copy; apply with Engine::set_settings().
 struct Settings {
     Upscaler upscaler = Upscaler::VfxSuperRes;
@@ -60,6 +66,9 @@ struct Settings {
     // Engine::set_compare_split() (window output only).
     bool compare = false;
 
+    // Live input only (screen capture).
+    LiveMode live_mode = LiveMode::LowLatency;
+
     bool operator==(const Settings&) const = default;
 };
 
@@ -67,6 +76,7 @@ NITID_EXPORT std::string_view to_string(Upscaler) noexcept;
 NITID_EXPORT std::string_view to_string(SuperResQuality) noexcept;
 NITID_EXPORT std::string_view to_string(FrameGen) noexcept;
 NITID_EXPORT std::string_view to_string(Cleanup) noexcept;
+NITID_EXPORT std::string_view to_string(LiveMode) noexcept;
 NITID_EXPORT std::string_view to_string(FrameGenQuality) noexcept;
 
 // Short description of the chosen upscaler, e.g. "VSR high", "FSR 1", "NIS", "off".

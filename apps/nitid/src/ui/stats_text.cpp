@@ -47,6 +47,13 @@ std::string audio_text(const nitid::Stats& st)
                        st.audio_latency_ms, st.display_latency_ms);
 }
 
+std::string live_text(const nitid::Settings& s, const nitid::Stats& st)
+{
+    if (!st.live) return "";
+    return std::format(" | live {}: {} | {:.1f} fps in, latency {:.1f} ms, dropped {}", nitid::to_string(s.live_mode),
+                       st.capture_status, st.capture_fps, st.live_latency_ms, st.capture_dropped);
+}
+
 std::string stats_line(const nitid::Settings& s, const nitid::Stats& st)
 {
     return std::format("t={:.1f}s | {}x{}@{:.3f} -> {}x{} (window {}x{} @ {:.0f} Hz) | {} | {} | out {:.1f} fps | "
@@ -54,7 +61,8 @@ std::string stats_line(const nitid::Settings& s, const nitid::Stats& st)
                        st.position_s, st.source_width, st.source_height, st.source_fps, st.work_width, st.work_height,
                        st.output_width, st.output_height, st.display_hz, upscaler_text(s, st), frame_gen_text(s, st),
                        st.output_fps, st.output_frames, st.generated_frames, st.skipped_frames, st.late_frames,
-                       st.missed_refreshes, st.scene_cuts, audio_text(st));
+                       st.missed_refreshes, st.scene_cuts, audio_text(st)) +
+           live_text(s, st);
 }
 
 std::string stats_report(const nitid::SourceInfo& src, const nitid::Settings& s, const nitid::Stats& st)
@@ -72,6 +80,10 @@ std::string stats_report(const nitid::SourceInfo& src, const nitid::Settings& s,
     r += std::format("Display:  {:.1f} fps measured, {} missed refreshes, {} late frames\n", st.output_fps,
                      st.missed_refreshes, st.late_frames);
     r += std::format("Sound:    {}\n", audio_text(st));
+    if (st.live)
+        r += std::format("Live:     {}, {} | {:.1f} fps arriving, capture -> screen {:.1f} ms, {} dropped, decode+copy {:.2f} ms\n",
+                         nitid::to_string(s.live_mode), st.capture_status, st.capture_fps, st.live_latency_ms,
+                         st.capture_dropped, st.avg.decode_ms);
     r += std::format("Avg ms:   decode+convert {:.2f} | upload {:.2f} | upscale {:.2f} | frame gen {:.2f} | output {:.2f}\n",
                      st.avg.decode_ms, st.avg.upload_ms, st.avg.upscale_ms, st.avg.frame_gen_ms, st.avg.output_ms);
     return r;

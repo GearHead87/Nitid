@@ -31,8 +31,12 @@ public:
     void luma_thumbnail(CUdeviceptr y, size_t y_pitch, int width, int height, int bytes_per_sample, int block,
                         bool full_range, CUdeviceptr out, int tw, int th, CUstream stream);
 
+    // Captured frames: BGRx / RGBx (4 bytes per pixel, row pitch `pitch`) -> RGBA8 (alpha 255), tightly packed.
+    void rgbx_to_rgba(CUdeviceptr src, size_t pitch, CUdeviceptr rgba, int width, int height, bool bgr, CUstream stream);
+
 private:
     CUmodule module_ = nullptr;
+    CUfunction rgbx_ = nullptr;
     CUfunction yuv_to_rgba_ = nullptr;
     CUfunction luma_thumb_ = nullptr;
 };

@@ -44,6 +44,11 @@ int main(int argc, char** argv)
     cli.add_flag("--fullscreen", o.fullscreen, "Start fullscreen");
     cli.add_option("--width", o.width, "Window width in pixels (with --height)");
     cli.add_option("--height", o.height, "Window height in pixels (with --width)");
+    cli.add_option("--pipewire", o.pipewire, "Live input from a PipeWire video node (id, name or serial) instead of a file");
+    std::string live_mode = "low-latency";
+    cli.add_option("--live-mode", live_mode, "Live input: low-latency (newest frame) or smooth (frame generation, ~1 frame later)")
+        ->check(CLI::IsMember({"low-latency", "smooth"}))
+        ->capture_default_str();
     cli.add_option("--start", o.start_s, "Start at this time in seconds");
     cli.add_flag("!--no-audio", o.open.audio, "Play without sound");
     cli.add_option("--volume", o.volume, "Volume, 0 to 2 (1 = as recorded)")->check(CLI::Range(0.0, 2.0))->capture_default_str();
@@ -80,6 +85,7 @@ int main(int argc, char** argv)
     parse_upscaling(upscale, o.settings);  // names already checked by CLI11
     parse_frame_gen(frame_gen, o.settings);
     parse_cleanup(cleanup, o.settings);
+    o.settings.live_mode = live_mode == "smooth" ? nitid::LiveMode::Smooth : nitid::LiveMode::LowLatency;
     o.settings.frame_gen_multiplier = multiplier;
 
     std::sort(o.capture_at.begin(), o.capture_at.end());

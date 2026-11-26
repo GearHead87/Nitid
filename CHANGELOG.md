@@ -8,6 +8,12 @@ release workflow puts that section at the top of the GitHub release, followed by
 
 ## [Unreleased]
 
+### Added
+- **Live input from PipeWire** (`nitid --pipewire <node>`): any PipeWire video node (the path screen capture uses),
+  upscaled and shown at the display rate. `--live-mode low-latency` (default: the newest frame, ~28 ms from
+  arrival to screen with a 60 fps source) or `smooth` (frame generation between captured frames, one frame later).
+  DMA-BUF frames are imported through Vulkan; shared memory works too.
+
 ## [0.3.0] - 2026-11-26
 
 Smooth frame generation at every quality, a side-by-side compare view, and optional clean-up. Test results:

@@ -77,3 +77,14 @@ extern "C" __global__ void luma_thumbnail(const unsigned char* y_plane, size_t y
         }
     out[ty * tw + tx] = to8((sum / max(n, 1) - y_off) * y_scale);
 }
+
+// Captured desktop frames (PipeWire): 4 bytes per pixel, B G R x (bgr = 1) or R G B x (bgr = 0), any row pitch
+// -> RGBA8, alpha 255, tightly packed.
+extern "C" __global__ void rgbx_to_rgba(const unsigned char* src, size_t src_pitch, unsigned char* out, int w, int h, int bgr)
+{
+    const int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= w || y >= h) return;
+    const uchar4 p = *reinterpret_cast<const uchar4*>(src + size_t(y) * src_pitch + size_t(x) * 4);
+    reinterpret_cast<uchar4*>(out)[size_t(y) * w + x] = bgr ? make_uchar4(p.z, p.y, p.x, 255) : make_uchar4(p.x, p.y, p.z, 255);
+}

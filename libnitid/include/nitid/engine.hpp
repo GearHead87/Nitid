@@ -49,6 +49,9 @@ public:
 
     // --- Input -------------------------------------------------------------------------------
     SourceInfo open_file(const std::string& path, const OpenOptions& options = {});
+    // Live input from PipeWire: `target` is a node id, name or serial (e.g. a test pattern from gst-launch). Returns
+    // at once; frames start when the stream connects (Stats::capture_status). Window output only.
+    SourceInfo open_pipewire(const std::string& target);
     void close_source();
     bool has_source() const noexcept;
 
@@ -106,6 +109,7 @@ public:
 private:
     Engine();
     bool end_of_source();
+    bool render_live();
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

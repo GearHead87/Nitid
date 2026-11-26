@@ -8,6 +8,7 @@
 #include "gpu/kernels.hpp"
 #include "gpu/vulkan_context.hpp"
 #include "input/ffmpeg_file_source.hpp"
+#include "input/pipewire_capture.hpp"
 #include "output/swapchain_presenter.hpp"
 #include "pipeline/frame_clock.hpp"
 #include "pipeline/pipeline.hpp"
@@ -33,7 +34,8 @@ struct Engine::Impl {
     std::unique_ptr<gpu::Kernels> kernels;
 
     std::unique_ptr<output::SwapchainPresenter> presenter;
-    std::unique_ptr<input::FfmpegFileSource> source;
+    std::unique_ptr<input::FrameSource> source;
+    input::PipeWireCapture* capture = nullptr;  // = source when live
     std::unique_ptr<pipeline::Pipeline> pipe;
     std::unique_ptr<audio::AudioPlayer> audio;
     OpenOptions open_options;
@@ -49,6 +51,10 @@ struct Engine::Impl {
     std::unique_ptr<pipeline::RenderAhead> ahead;  // window output: the pipeline runs on its own thread
     bool waiting_first = false;                     // after open / seek: waiting for the worker's first frame
     float compare_split = 0.5f;
+    double live_latency_ms = 0;
+    std::optional<pipeline::Output> last_live;  // live: shown while paused or until a new frame arrives
+    uint64_t last_live_gen = 0;                 // pipeline buffers it points into
+    double live_start_s = 0;                    // arrival time of the first live frame
     std::optional<std::chrono::steady_clock::time_point> seek_started;  // logs how long a seek took
 
     Size headless_box;
@@ -153,8 +159,9 @@ SourceInfo Engine::open_file(const std::string& path, const OpenOptions& options
     close_source();
     m.open_options = options;
     input::GpuDecode gd{m.cuda->ctx, m.kernels.get()};
-    m.source = std::make_unique<input::FfmpegFileSource>(path, options, int(m.cuda->device), &gd);
-    m.source->set_scene_cut_detection(m.settings.scene_cut_detection);
+    auto file = std::make_unique<input::FfmpegFileSource>(path, options, int(m.cuda->device), &gd);
+    file->set_scene_cut_detection(m.settings.scene_cut_detection);
+    m.source = std::move(file);
     m.pipe = std::make_unique<pipeline::Pipeline>(*m.cuda, m.vfx, m.caps.super_res, m.caps.frame_gen);
     m.pipe->set_source(m.source.get());
     m.clock.reset();
@@ -189,9 +196,40 @@ SourceInfo Engine::open_file(const std::string& path, const OpenOptions& options
     return m.info;
 }
 
+SourceInfo Engine::open_pipewire(const std::string& target)
+{
+    Impl& m = *impl_;
+    if (!m.presenter) throw Error("live input needs a window (attach_window first)");
+    m.cuda->make_current();
+    close_source();
+    input::PipeWireCapture::Connect connect = [target](input::PipeWireCapture::Target& t, std::string&, const std::atomic<bool>&,
+                                                       const std::function<void(std::string)>&) {
+        // A number is a node id; anything else a node name or serial.
+        if (!target.empty() && target.find_first_not_of("0123456789") == std::string::npos) t.node = uint32_t(std::stoul(target));
+        else t.target = target;
+        t.name = "PipeWire " + target;
+        return true;
+    };
+    auto cap = std::make_unique<input::PipeWireCapture>(std::move(connect), *m.vk, *m.cuda, *m.kernels);
+    m.capture = cap.get();
+    m.source = std::move(cap);
+    m.pipe = std::make_unique<pipeline::Pipeline>(*m.cuda, m.vfx, m.caps.super_res, m.caps.frame_gen);
+    m.pipe->set_source(m.source.get());
+    m.info = m.source->info();
+    m.info.live = true;
+    m.info.audio = "not captured (picture only)";
+    m.live_latency_ms = 0;
+    m.live_start_s = 0;
+    m.position_s = 0;
+    m.last_live.reset();
+    reset_stats();
+    return m.info;
+}
+
 void Engine::close_source()
 {
     Impl& m = *impl_;
+    m.capture = nullptr;
     m.ahead.reset();
     m.audio.reset();
     m.pipe.reset();
@@ -203,7 +241,8 @@ bool Engine::has_source() const noexcept { return impl_->source != nullptr; }
 void Engine::set_settings(const Settings& s)
 {
     impl_->settings = s;
-    if (impl_->source) impl_->source->set_scene_cut_detection(s.scene_cut_detection);
+    if (impl_->source && !impl_->capture)
+        static_cast<input::FfmpegFileSource*>(impl_->source.get())->set_scene_cut_detection(s.scene_cut_detection);
 }
 
 const Settings& Engine::settings() const noexcept { return impl_->settings; }
@@ -215,6 +254,15 @@ Stats Engine::stats() const
     if (m.ahead) m.ahead->fill_stats(s);
     else if (m.pipe) m.pipe->fill_stats(s);
     if (m.source) s.source_fps = m.source->info().fps;
+    if (m.capture) {
+        s.live = true;
+        s.capture_status = m.capture->status();
+        s.capture_failed = m.capture->failed();
+        s.capture_fps = m.pipe && m.pipe->live_interval() > 0 ? 1.0 / m.pipe->live_interval() : 0;
+        s.source_fps = s.capture_fps;
+        s.live_latency_ms = m.live_latency_ms;
+        s.capture_dropped = m.capture->dropped();
+    }
     s.display_hz = m.presenter ? m.refresh_hz : 0;
     s.output_frames = m.output_frames;
     s.output_fps = m.presenter ? m.presenter->measured_fps() : m.measured_fps;
@@ -292,7 +340,7 @@ bool Engine::paused() const noexcept { return impl_->paused; }
 void Engine::seek(double seconds)
 {
     Impl& m = *impl_;
-    if (!m.source) return;
+    if (!m.source || m.capture) return;  // live input can't seek
     const auto& info = m.source->info();
     double last = info.duration_s > 0 ? std::max(0.0, info.duration_s - 1.0 / info.fps) : seconds;
     seconds = std::clamp(seconds, 0.0, last);
@@ -345,6 +393,7 @@ bool Engine::render_frame()
         m.presenter->present(0, {});
         return true;
     }
+    if (m.capture) return render_live();
     const double fps = m.source->info().fps;
     const double period = 1.0 / m.refresh_hz;
     const double step = fps * period;  // source frames per refresh
@@ -387,6 +436,37 @@ bool Engine::render_frame()
     }
     m.output_ms.add(m.settings.compare ? m.presenter->present(f->ptr, f->size, f->orig, f->orig_size, m.compare_split)
                                        : m.presenter->present(f->ptr, f->size));
+    m.count_output();
+    return true;
+}
+
+bool Engine::render_live()
+{
+    Impl& m = *impl_;
+    m.pipe->configure(m.presenter->window_size(), m.settings);
+    const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    const bool smooth = m.settings.live_mode == LiveMode::Smooth;
+    // Smooth: show the moment one frame interval (+ one refresh of margin) ago, so there is a frame after it.
+    const double target = now - (m.pipe->live_interval() + 1.0 / m.refresh_hz);
+    if (m.last_live && m.pipe->generation() != m.last_live_gen) m.last_live.reset();  // buffers reallocated
+    std::optional<pipeline::Output> out;
+    if (!m.paused || !m.last_live) out = m.pipe->produce_live(smooth, target);
+    if (out) {
+        m.last_live = out;
+        m.last_live_gen = m.pipe->generation();
+    } else {
+        out = m.last_live;
+    }
+    if (!out) {
+        m.presenter->present(0, {});  // waiting for the first frame (or the permission dialog)
+        return true;
+    }
+    if (m.live_start_s <= 0) m.live_start_s = out->arrival_s;
+    m.position_s = out->arrival_s - m.live_start_s;  // seconds since the first frame (for the app's clock / tests)
+    const double lat = (now - out->arrival_s) * 1000 + m.presenter->display_latency_s() * 1000;
+    if (!m.paused) m.live_latency_ms = m.live_latency_ms > 0 ? m.live_latency_ms + (lat - m.live_latency_ms) * 0.05 : lat;
+    m.output_ms.add(m.settings.compare ? m.presenter->present(out->ptr, out->size, out->orig, out->orig_size, m.compare_split)
+                                       : m.presenter->present(out->ptr, out->size));
     m.count_output();
     return true;
 }

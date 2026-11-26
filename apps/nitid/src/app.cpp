@@ -95,6 +95,22 @@ bool App::open(const std::string& path)
     return true;
 }
 
+void App::open_live(const std::string& target)
+{
+    try {
+        source_ = engine_->open_pipewire(target);
+    } catch (const nitid::Error& e) {
+        error_ = e.what();
+        has_source_ = false;
+        return;
+    }
+    has_source_ = true;
+    ended_ = false;
+    error_.clear();
+    std::println("Live input: {}", source_.name);
+    update_title();
+}
+
 void App::show_open_dialog()
 {
     static const SDL_DialogFileFilter filters[] = {
@@ -177,7 +193,8 @@ int App::run()
     }
 
     if (opts_.fullscreen) handle(Action::ToggleFullscreen);
-    if (!opts_.file.empty() && open(opts_.file) && opts_.start_s > 0) engine_->seek(opts_.start_s);
+    if (!opts_.pipewire.empty()) open_live(opts_.pipewire);
+    else if (!opts_.file.empty() && open(opts_.file) && opts_.start_s > 0) engine_->seek(opts_.start_s);
     SDL_SyncWindow(window_);
     sync_display();
     print_help();

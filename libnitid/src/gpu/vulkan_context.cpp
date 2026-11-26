@@ -108,6 +108,16 @@ void VulkanContext::create_device(VkSurfaceKHR surface)
         }
     }
 
+    // Screen capture: import the compositor's DMA-BUF frames (spike S6).
+    dma_buf_import = contains(avail, VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME) &&
+                     contains(avail, VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME) &&
+                     contains(avail, VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME);
+    if (dma_buf_import) {
+        exts.push_back(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
+        exts.push_back(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME);
+        exts.push_back(VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME);
+    }
+
     uint32_t n = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(phys, &n, nullptr);
     std::vector<VkQueueFamilyProperties> qf(n);
@@ -129,11 +139,14 @@ void VulkanContext::create_device(VkSurfaceKHR surface)
     VkPhysicalDevicePresentIdFeaturesKHR pid{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR, &pw};
     pw.presentWait = VK_TRUE;
     pid.presentId = VK_TRUE;
-    float prio = 1.0f;
+    // Two queues of the family when it has them: the render thread's, and one for the capture thread (Vulkan
+    // queues must not be used from two threads at once).
+    const uint32_t queues = std::min(2u, qf[queue_family].queueCount);
+    float prio[2] = {1.0f, 0.5f};
     VkDeviceQueueCreateInfo qci{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
     qci.queueFamilyIndex = queue_family;
-    qci.queueCount = 1;
-    qci.pQueuePriorities = &prio;
+    qci.queueCount = queues;
+    qci.pQueuePriorities = prio;
     // Dynamic rendering (Vulkan 1.3): the app's overlay (ImGui) draws onto the window image without render passes.
     VkPhysicalDeviceVulkan13Features v13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
     v13.dynamicRendering = VK_TRUE;
@@ -146,6 +159,8 @@ void VulkanContext::create_device(VkSurfaceKHR surface)
     ci.ppEnabledExtensionNames = exts.data();
     NITID_VK(vkCreateDevice(phys, &ci, nullptr, &device));
     vkGetDeviceQueue(device, queue_family, 0, &queue);
+    if (queues > 1) vkGetDeviceQueue(device, queue_family, 1, &capture_queue);
+    else capture_queue = queue;
 
     VkCommandPoolCreateInfo pci{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     pci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;

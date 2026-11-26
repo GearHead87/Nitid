@@ -61,6 +61,11 @@ void Pipeline::allocate_ring()
 void Pipeline::configure(Size box, const Settings& settings)
 {
     if (!source_ || !box.w || !box.h) return;
+    if (!src_.w || !src_.h) {  // live source before its first frame: remember, configure once the size is known
+        box_ = box;
+        settings_ = settings;
+        return;
+    }
     bool same = box == box_ && settings == settings_ && work_.w;
     if (same) return;
     box_ = box;
@@ -249,6 +254,69 @@ std::optional<Output> Pipeline::produce(double position, int multiplier)
         return with_orig(Output{fg_->output(), work_, true}, p.phase < 0.5f ? c : n);  // nearest real frame
     }
     return with_orig(Output{c.buf.ptr(), work_, false}, c);
+}
+
+std::optional<Output> Pipeline::produce_live(bool interpolate, double target)
+{
+    if (!source_) return std::nullopt;
+    // Newest arrived frame; anything older that wasn't shown yet is dropped.
+    std::optional<input::DecodedFrame> f;
+    while (auto g = source_->try_next()) {
+        if (f) {
+            ++skipped_;
+            source_->recycle(std::move(*f));
+        }
+        f = std::move(g);
+    }
+    if (f) {
+        decode_ms_.add(f->decode_ms);
+        if (last_arrival_ > 0) {
+            const double dt = f->arrival_s - last_arrival_;
+            live_interval_ = live_interval_ > 0 ? live_interval_ + (dt - live_interval_) * 0.1 : dt;
+        }
+        last_arrival_ = f->arrival_s;
+        if (f->width != src_.w || f->height != src_.h) {
+            // First frame, or the captured window changed size: start over at the new size.
+            src_ = {f->width, f->height};
+            work_ = {};
+            for (auto& sl : slots_) sl.index = -1;
+            const Size box = box_;
+            const Settings st = settings_;
+            box_ = {};
+            configure(box, st);
+        }
+        if (work_.w) {
+            if (slots_[next_].valid()) std::swap(cur_, next_);  // next becomes the previous frame
+            Slot& dst = slots_[next_];
+            upload(*f, dst);
+            dst.index = f->index;
+            dst.arrival = f->arrival_s;
+            dst.scene_cut = false;
+            ++source_frames_;
+        }
+        source_->recycle(std::move(*f));
+    }
+    const Slot& c = slots_[cur_];
+    const Slot& n = slots_[next_];
+    if (!n.valid()) return std::nullopt;  // nothing has arrived yet
+    auto with = [&](Output o, const Slot& sl) {
+        if (compare_ && sl.has_orig) o.orig = sl.orig.ptr(), o.orig_size = src_;
+        o.arrival_s = sl.arrival;
+        return o;
+    };
+    const Output newest = with(Output{n.buf.ptr(), work_, false}, n);
+    if (!interpolate || !c.valid()) return newest;
+    const double span = n.arrival - c.arrival;
+    // A long gap (a still desktop sends no frames) is not motion to interpolate.
+    if (target >= n.arrival || span <= 0 || span > 0.25) return newest;
+    if (target <= c.arrival) return with(Output{c.buf.ptr(), work_, false}, c);
+    const float phase = float((target - c.arrival) / span);
+    if (fg_active_) {
+        timed(frame_gen_ms_, [&] { fg_->run(c.buf.ptr(), n.buf.ptr(), phase, false); });
+        ++generated_;
+        return with(Output{fg_->output(), work_, true}, phase < 0.5f ? c : n);
+    }
+    return phase < 0.5f ? with(Output{c.buf.ptr(), work_, false}, c) : newest;
 }
 
 void Pipeline::fill_stats(Stats& s) const

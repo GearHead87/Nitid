@@ -20,6 +20,7 @@ struct DecodedFrame {
     double time_s = 0;          // index / fps
     bool scene_cut = false;     // this frame starts a new shot
     double decode_ms = 0;       // decode + colour convert time
+    double arrival_s = 0;       // live sources: when the frame arrived (steady clock, seconds)
 };
 
 class FrameSource {
@@ -35,6 +36,13 @@ public:
     virtual void seek(double seconds) = 0;
     // Start again from the beginning.
     void restart() { seek(0); }
+
+    // Live sources (screen capture): frames arrive at their own pace and nothing can be waited for.
+    virtual bool live() const { return false; }
+    // Live: the newest frame that arrived since the last call (older ones are dropped), or nullopt.
+    virtual std::optional<DecodedFrame> try_next() { return std::nullopt; }
+    // Live: frames dropped because a newer one arrived before they were taken.
+    virtual uint64_t dropped() const { return 0; }
 };
 
 } // namespace nitid::input

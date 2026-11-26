@@ -27,6 +27,15 @@ struct PipeWireLib {
     decltype(&::pw_stream_queue_buffer) stream_queue_buffer;
     decltype(&::pw_stream_get_time_n) stream_get_time_n;
     decltype(&::pw_stream_get_state) stream_get_state;
+    // Video capture
+    decltype(&::pw_context_new) context_new;
+    decltype(&::pw_context_destroy) context_destroy;
+    decltype(&::pw_context_connect) context_connect;
+    decltype(&::pw_context_connect_fd) context_connect_fd;
+    decltype(&::pw_core_disconnect) core_disconnect;
+    decltype(&::pw_stream_new) stream_new;
+    decltype(&::pw_stream_add_listener) stream_add_listener;
+    decltype(&::pw_stream_update_params) stream_update_params;
     std::string version;
 };
 

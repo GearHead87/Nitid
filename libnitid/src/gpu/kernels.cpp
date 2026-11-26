@@ -1,5 +1,6 @@
 #include "gpu/kernels.hpp"
 
+#include "core/check.hpp"
 #include "core/log.hpp"
 #include "gpu/cuda_context.hpp"
 
@@ -53,6 +54,7 @@ Kernels::Kernels()
         yuv_to_rgba_ = luma_thumb_ = nullptr;
         log::warn("GPU colour conversion unavailable (kernels missing); using the CPU");
     }
+    if (cuModuleGetFunction(&rgbx_, module_, "rgbx_to_rgba") != CUDA_SUCCESS) rgbx_ = nullptr;
 #else
     log::info("built without nvcc: colour conversion runs on the CPU");
 #endif
@@ -77,6 +79,14 @@ void Kernels::luma_thumbnail(CUdeviceptr y, size_t y_pitch, int w, int h, int by
     float y_off = full_range ? 0.0f : 16.0f / 255.0f, y_scale = full_range ? 1.0f : 255.0f / 219.0f;
     void* args[] = {&y, &y_pitch, &w, &h, &bytes, &block, &y_off, &y_scale, &out, &tw, &th};
     NITID_CU(cuLaunchKernel(luma_thumb_, div_up(tw, 16), div_up(th, 16), 1, 16, 16, 1, 0, stream, args, nullptr));
+}
+
+void Kernels::rgbx_to_rgba(CUdeviceptr src, size_t pitch, CUdeviceptr rgba, int w, int h, bool bgr, CUstream stream)
+{
+    if (!rgbx_) failf("capture colour conversion kernel missing");
+    int b = bgr ? 1 : 0;
+    void* args[] = {&src, &pitch, &rgba, &w, &h, &b};
+    NITID_CU(cuLaunchKernel(rgbx_, div_up(w, 32), div_up(h, 8), 1, 32, 8, 1, 0, stream, args, nullptr));
 }
 
 } // namespace nitid::gpu

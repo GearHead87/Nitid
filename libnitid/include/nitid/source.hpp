@@ -16,6 +16,7 @@ struct SourceInfo {
     double duration_s = 0;    // 0 if unknown
     std::string audio;        // e.g. "aac 48000 Hz 2 ch -> PipeWire 1.6.11", or why there is no sound
     bool has_audio = false;   // sound is playing (window output only)
+    bool live = false;        // screen capture / PipeWire: no duration, no seeking
 };
 
 struct OpenOptions {

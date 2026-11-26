@@ -51,6 +51,14 @@ struct Stats {
     double position_s = 0;                // playback position
     StageTimes avg;
 
+    // Live input (screen capture)
+    bool live = false;
+    std::string capture_status;     // "waiting for the desktop (permission dialog)", "capturing 2560x1440 (DMA-BUF)", ...
+    bool capture_failed = false;
+    double capture_fps = 0;         // frames arriving per second (a still desktop sends few)
+    double live_latency_ms = 0;     // from a frame arriving to it being on screen (smoothed)
+    std::uint64_t capture_dropped = 0;  // arrived but replaced by a newer one before being shown
+
     // Sound (when the source has audio and it is playing)
     bool audio_active = false;
     double av_sync_ms = 0;          // audio minus picture, smoothed (+ = sound early); kept near 0 by resampling

@@ -97,6 +97,7 @@ add_library(libnitid
   # input: frame sources (files now; screen capture and capture cards later)
   src/input/ffmpeg_file_source.cpp
   src/input/scene_cut.cpp
+  src/input/pipewire_capture.cpp   # live input: screen capture / PipeWire video (DMA-BUF or shared memory)
   # audio: sound playback in sync with the picture (PipeWire)
   src/audio/audio_player.cpp
   src/platform/pipewire_lib.cpp

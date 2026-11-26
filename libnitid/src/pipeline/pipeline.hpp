@@ -30,6 +30,7 @@ struct Output {
     // Compare mode: the original source frame nearest in time (source size), or 0.
     CUdeviceptr orig = 0;
     Size orig_size;
+    double arrival_s = 0;  // live sources: when the (newest real) frame shown arrived
 };
 
 class Pipeline {
@@ -46,6 +47,13 @@ public:
     // nullopt once the source has ended and position is past the last frame.
     std::optional<Output> produce(double position, int multiplier);
 
+    // Live sources (screen capture): takes the newest frame that arrived (if any) and returns what to show:
+    //   interpolate = false: the newest frame (lowest latency);
+    //   interpolate = true: the moment `target_s` (arrival clock) between the last two frames, generated when frame
+    //   generation is on (smooth, about one frame interval behind).
+    std::optional<Output> produce_live(bool interpolate, double target_s);
+    double live_interval() const { return live_interval_; }  // average time between arriving frames
+
     Size work_size() const { return work_; }
     // Changes whenever the frame buffers are reallocated (an Output from before is then invalid).
     uint64_t generation() const { return generation_; }
@@ -58,6 +66,7 @@ private:
         gpu::CudaBuffer orig;    // compare mode: the source frame as decoded
         bool has_orig = false;
         int64_t index = -1;
+        double arrival = 0;      // live sources
         bool scene_cut = false;  // a cut happened between the previous real frame and this one
         bool valid() const { return index >= 0; }
     };
@@ -79,6 +88,7 @@ private:
     bool sr_active_ = false, fg_active_ = false;  // sr_active_: any upscaler running
     bool sr_failed_ = false, fg_failed_ = false;
     bool compare_ = false;
+    double live_interval_ = 0, last_arrival_ = 0;
     std::string sr_note_, fg_note_, cleanup_note_;
     bool cleanup_active_ = false;
 

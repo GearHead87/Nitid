@@ -32,7 +32,8 @@ public:
     VkInstance instance = VK_NULL_HANDLE;
     VkPhysicalDevice phys = VK_NULL_HANDLE;
     VkDevice device = VK_NULL_HANDLE;
-    VkQueue queue = VK_NULL_HANDLE;
+    VkQueue queue = VK_NULL_HANDLE;           // render thread: presenting, overlay
+    VkQueue capture_queue = VK_NULL_HANDLE;   // capture thread: DMA-BUF copies (same family; = queue if only one)
     uint32_t queue_family = 0;
     VkCommandPool pool = VK_NULL_HANDLE;
     VkPhysicalDeviceProperties props{};
@@ -42,6 +43,7 @@ public:
     // Optional features, enabled when available.
     bool present_wait = false;  // VK_KHR_present_id + VK_KHR_present_wait
     bool swapchain = false;
+    bool dma_buf_import = false;  // VK_EXT_external_memory_dma_buf + image_drm_format_modifier + queue_family_foreign
 
 private:
     std::vector<std::string> available_device_extensions() const;
