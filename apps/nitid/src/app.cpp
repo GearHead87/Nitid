@@ -166,6 +166,7 @@ int App::run()
     engine_->set_settings(settings_);
     engine_->set_volume(float(opts_.volume));
     engine_->set_audio_delay(opts_.audio_delay_ms / 1000.0);
+    engine_->set_compare_split(float(opts_.compare_split));
 
     overlay_ = std::make_unique<Overlay>(window_, *engine_);
     ui_.state().visible = opts_.ui == 1 || (opts_.ui == -1 && opts_.capture_at.empty());
@@ -355,6 +356,7 @@ void App::handle(Action a)
         case Action::Multiplier3: settings_.frame_gen_multiplier = 3; break;
         case Action::Multiplier4: settings_.frame_gen_multiplier = 4; break;
         case Action::ToggleSceneCuts: settings_.scene_cut_detection = !settings_.scene_cut_detection; break;
+        case Action::ToggleCompare: settings_.compare = !settings_.compare; break;
         case Action::ResetStats: engine_->reset_stats(); break;
         case Action::PrintStats: std::println("{}", stats_line(settings_, engine_->stats())); break;
         default: break;

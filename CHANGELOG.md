@@ -14,6 +14,8 @@ release workflow puts that section at the top of the GitHub release, followed by
   one every 2nd (3rd, 4th) refresh, evenly paced (0.2.0: ~100 fps with 1000+ missed refreshes in 12 s). Changing
   settings while playing no longer freezes the window while AI models load.
 - Stats: late frames, frame-gen stride.
+- **Compare view** (`X`, Settings → View, `--compare`): the original on the left, Nitid on the right; drag on the
+  picture to move the line.
 
 ## [0.2.0] - 2026-11-26
 

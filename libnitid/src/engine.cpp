@@ -48,6 +48,7 @@ struct Engine::Impl {
     pipeline::DisplayClock clock;
     std::unique_ptr<pipeline::RenderAhead> ahead;  // window output: the pipeline runs on its own thread
     bool waiting_first = false;                     // after open / seek: waiting for the worker's first frame
+    float compare_split = 0.5f;
     std::optional<std::chrono::steady_clock::time_point> seek_started;  // logs how long a seek took
 
     Size headless_box;
@@ -227,7 +228,11 @@ Stats Engine::stats() const
     }
     s.position_s = m.position_s;
     s.avg.output_ms = m.output_ms.value();
-    if (m.presenter) s.display_latency_ms = m.presenter->display_latency_s() * 1000;
+    if (m.presenter) {
+        s.display_latency_ms = m.presenter->display_latency_s() * 1000;
+        auto r = m.presenter->video_rect();
+        s.video_x = r.x, s.video_y = r.y, s.video_w = r.w, s.video_h = r.h;
+    }
     if (m.audio) {
         auto a = m.audio->stats();
         s.audio_active = true;
@@ -275,6 +280,9 @@ void Engine::set_audio_delay(double s)
     impl_->audio_delay = s;
     if (impl_->audio) impl_->audio->set_delay(s);
 }
+
+void Engine::set_compare_split(float split) { impl_->compare_split = std::clamp(split, 0.0f, 1.0f); }
+float Engine::compare_split() const noexcept { return impl_->compare_split; }
 
 float Engine::volume() const noexcept { return impl_->volume; }
 bool Engine::muted() const noexcept { return impl_->muted; }
@@ -377,7 +385,8 @@ bool Engine::render_frame()
         auto when = std::chrono::steady_clock::now() + std::chrono::duration<double>(m.presenter->display_latency_s());
         m.audio->sync(pos / fps, std::chrono::duration_cast<std::chrono::nanoseconds>(when.time_since_epoch()).count());
     }
-    m.output_ms.add(m.presenter->present(f->ptr, f->size));
+    m.output_ms.add(m.settings.compare ? m.presenter->present(f->ptr, f->size, f->orig, f->orig_size, m.compare_split)
+                                       : m.presenter->present(f->ptr, f->size));
     m.count_output();
     return true;
 }

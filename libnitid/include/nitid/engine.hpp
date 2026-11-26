@@ -83,6 +83,9 @@ public:
     // Renders and presents one display refresh. Blocks until the display can take a new frame.
     // Returns false when the source has ended (and is not looping); the last frame stays on screen.
     bool render_frame();
+    // Compare mode (Settings::compare): where the window splits original | Nitid, 0..1 of the picture's width.
+    void set_compare_split(float split);
+    float compare_split() const noexcept;
     // Overlay: the app draws on top of the video (on-screen controls). nullptr = none.
     void set_overlay(OverlayCallback overlay);
     VulkanDevice vulkan_device() const;

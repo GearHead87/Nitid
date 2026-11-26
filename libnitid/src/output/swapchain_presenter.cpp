@@ -5,6 +5,7 @@
 #include "gpu/vk_check.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <chrono>
 #include <cstdio>
 
@@ -63,7 +64,8 @@ SwapchainPresenter::~SwapchainPresenter()
     cuStreamSynchronize(stream_);
     destroy_swapchain();
     for (auto& s : slots_) {
-        free_slot_image(s);
+        free_image(s.img);
+        free_image(s.orig);
         s.ready.reset();
         vkDestroySemaphore(vk_.device, s.acquired, nullptr);
         vkDestroyFence(vk_.device, s.fence, nullptr);
@@ -155,21 +157,21 @@ void SwapchainPresenter::resize(pipeline::Size window)
     dirty_ = true;
 }
 
-void SwapchainPresenter::free_slot_image(Slot& s)
+void SwapchainPresenter::free_image(Img& i)
 {
-    if (s.image) vkDestroyImage(vk_.device, s.image, nullptr);
-    if (s.memory) vkFreeMemory(vk_.device, s.memory, nullptr);
-    s.image = VK_NULL_HANDLE;
-    s.memory = VK_NULL_HANDLE;
-    s.buffer.reset();
-    s.size = {};
+    if (i.image) vkDestroyImage(vk_.device, i.image, nullptr);
+    if (i.memory) vkFreeMemory(vk_.device, i.memory, nullptr);
+    i.image = VK_NULL_HANDLE;
+    i.memory = VK_NULL_HANDLE;
+    i.buffer.reset();
+    i.size = {};
 }
 
-void SwapchainPresenter::ensure_slot_size(Slot& s, pipeline::Size size)
+void SwapchainPresenter::ensure_image(Img& i, pipeline::Size size)
 {
-    if (s.size == size && s.image) return;
-    free_slot_image(s);
-    s.buffer = std::make_unique<gpu::SharedBuffer>(vk_, VkDeviceSize(size.w) * size.h * 4);
+    if (i.size == size && i.image) return;
+    free_image(i);
+    i.buffer = std::make_unique<gpu::SharedBuffer>(vk_, VkDeviceSize(size.w) * size.h * 4);
     VkImageCreateInfo ci{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     ci.imageType = VK_IMAGE_TYPE_2D;
     ci.format = VK_FORMAT_R8G8B8A8_UNORM;
@@ -179,15 +181,15 @@ void SwapchainPresenter::ensure_slot_size(Slot& s, pipeline::Size size)
     ci.samples = VK_SAMPLE_COUNT_1_BIT;
     ci.tiling = VK_IMAGE_TILING_OPTIMAL;
     ci.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-    NITID_VK(vkCreateImage(vk_.device, &ci, nullptr, &s.image));
+    NITID_VK(vkCreateImage(vk_.device, &ci, nullptr, &i.image));
     VkMemoryRequirements r;
-    vkGetImageMemoryRequirements(vk_.device, s.image, &r);
+    vkGetImageMemoryRequirements(vk_.device, i.image, &r);
     VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
     ai.allocationSize = r.size;
     ai.memoryTypeIndex = vk_.memory_type(r.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    NITID_VK(vkAllocateMemory(vk_.device, &ai, nullptr, &s.memory));
-    NITID_VK(vkBindImageMemory(vk_.device, s.image, s.memory, 0));
-    s.size = size;
+    NITID_VK(vkAllocateMemory(vk_.device, &ai, nullptr, &i.memory));
+    NITID_VK(vkBindImageMemory(vk_.device, i.image, i.memory, 0));
+    i.size = size;
 }
 
 void SwapchainPresenter::save_capture(VkBuffer, VkDeviceMemory mem)
@@ -215,6 +217,12 @@ void SwapchainPresenter::save_capture(VkBuffer, VkDeviceMemory mem)
 
 double SwapchainPresenter::present(CUdeviceptr frame, pipeline::Size size)
 {
+    return present(frame, size, 0, {}, 0.5f);
+}
+
+double SwapchainPresenter::present(CUdeviceptr frame, pipeline::Size size, CUdeviceptr orig, pipeline::Size orig_size,
+                                   float split)
+{
     Slot& s = slots_[frame_ % kFrames];
     NITID_VK(vkWaitForFences(vk_.device, 1, &s.fence, VK_TRUE, UINT64_MAX));
     if (dirty_) {
@@ -235,10 +243,13 @@ double SwapchainPresenter::present(CUdeviceptr frame, pipeline::Size size)
     // CUDA: copy the pipeline frame into this slot's shared buffer, then signal Vulkan.
     double copy_ms = 0;
     const bool has_frame = frame && size.w && size.h;
+    const bool has_orig = has_frame && orig && orig_size.w && orig_size.h;
     if (has_frame) {
-        ensure_slot_size(s, size);
+        ensure_image(s.img, size);
+        if (has_orig) ensure_image(s.orig, orig_size);
         auto t0 = SteadyClock::now();
-        NITID_CU(cuMemcpyDtoDAsync(s.buffer->ptr(), frame, size_t(size.w) * size.h * 4, stream_));
+        NITID_CU(cuMemcpyDtoDAsync(s.img.buffer->ptr(), frame, size_t(size.w) * size.h * 4, stream_));
+        if (has_orig) NITID_CU(cuMemcpyDtoDAsync(s.orig.buffer->ptr(), orig, size_t(orig_size.w) * orig_size.h * 4, stream_));
         s.ready->cuda_signal(stream_);
         NITID_CU(cuStreamSynchronize(stream_));
         copy_ms = ms_since(t0);
@@ -258,27 +269,46 @@ double SwapchainPresenter::present(CUdeviceptr frame, pipeline::Size size)
     VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
     vkCmdClearColorImage(cb, target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &black, 1, &range);
     if (has_frame) {
-        barrier(cb, s.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT,
-                T, T);
-        VkBufferImageCopy c{};
-        c.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        c.imageExtent = {size.w, size.h, 1};
-        vkCmdCopyBufferToImage(cb, s.buffer->buffer(), s.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &c);
-        barrier(cb, s.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, T, T);
+        auto upload = [&](Img& im) {
+            barrier(cb, im.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0,
+                    VK_ACCESS_TRANSFER_WRITE_BIT, T, T);
+            VkBufferImageCopy c{};
+            c.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            c.imageExtent = {im.size.w, im.size.h, 1};
+            vkCmdCopyBufferToImage(cb, im.buffer->buffer(), im.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &c);
+            barrier(cb, im.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, T, T);
+        };
+        upload(s.img);
+        if (has_orig) upload(s.orig);
         barrier(cb, target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, T, T);  // clear before blit
         pipeline::Size out{extent_.width, extent_.height};
         pipeline::Rect r = pipeline::centre(pipeline::fit(size, out), out);
-        VkImageBlit blit{};
-        blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        blit.srcOffsets[1] = {int32_t(size.w), int32_t(size.h), 1};
-        blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        blit.dstOffsets[0] = {r.x, r.y, 0};
-        blit.dstOffsets[1] = {r.x + int32_t(r.w), r.y + int32_t(r.h), 1};
-        VkFilter filter = (r.w == size.w && r.h == size.h) ? VK_FILTER_NEAREST : VK_FILTER_LINEAR;
-        vkCmdBlitImage(cb, s.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
-                       &blit, filter);
+        video_rect_ = r;
+        // Blit the part [u0, u1) (fractions of the width) of an image onto the same part of the picture rectangle.
+        auto blit_part = [&](const Img& im, float u0, float u1) {
+            const int32_t sx0 = int32_t(std::lround(u0 * im.size.w)), sx1 = int32_t(std::lround(u1 * im.size.w));
+            const int32_t dx0 = r.x + int32_t(std::lround(u0 * r.w)), dx1 = r.x + int32_t(std::lround(u1 * r.w));
+            if (sx1 <= sx0 || dx1 <= dx0) return;
+            VkImageBlit blit{};
+            blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            blit.srcOffsets[0] = {sx0, 0, 0};
+            blit.srcOffsets[1] = {sx1, int32_t(im.size.h), 1};
+            blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            blit.dstOffsets[0] = {dx0, r.y, 0};
+            blit.dstOffsets[1] = {dx1, r.y + int32_t(r.h), 1};
+            VkFilter filter = (r.w == im.size.w && r.h == im.size.h) ? VK_FILTER_NEAREST : VK_FILTER_LINEAR;
+            vkCmdBlitImage(cb, im.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                           1, &blit, filter);
+        };
+        if (has_orig) {
+            const float u = std::clamp(split, 0.0f, 1.0f);
+            blit_part(s.orig, 0.0f, u);  // the original, plainly scaled (what a normal player shows)
+            blit_part(s.img, u, 1.0f);   // Nitid's picture
+        } else {
+            blit_part(s.img, 0.0f, 1.0f);
+        }
     }
     VkImageLayout last = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     VkAccessFlags last_access = VK_ACCESS_TRANSFER_WRITE_BIT;

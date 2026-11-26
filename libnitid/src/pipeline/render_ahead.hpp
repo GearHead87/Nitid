@@ -36,6 +36,8 @@ public:
         Size size;
         double pos = 0;       // position in source frames
         bool generated = false;
+        CUdeviceptr orig = 0; // compare mode: original frame (source size), or 0
+        Size orig_size;
     };
 
     static constexpr int kPool = 6;     // shown + up to 4 queued + 1 being written
@@ -93,6 +95,7 @@ private:
     std::optional<Frame> shown_;
     std::vector<int> free_;           // free pool slots
     std::vector<gpu::CudaBuffer> pool_;
+    std::vector<gpu::CudaBuffer> pool_orig_;  // compare mode
     Size pool_size_;
 
     // Frame-gen pacing (worker): average cost of one prepared frame, and the stride it implies.

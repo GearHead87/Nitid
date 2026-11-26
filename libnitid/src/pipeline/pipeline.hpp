@@ -27,6 +27,9 @@ struct Output {
     CUdeviceptr ptr = 0;
     Size size;
     bool generated = false;
+    // Compare mode: the original source frame nearest in time (source size), or 0.
+    CUdeviceptr orig = 0;
+    Size orig_size;
 };
 
 class Pipeline {
@@ -52,6 +55,8 @@ public:
 private:
     struct Slot {
         gpu::CudaBuffer buf;
+        gpu::CudaBuffer orig;    // compare mode: the source frame as decoded
+        bool has_orig = false;
         int64_t index = -1;
         bool scene_cut = false;  // a cut happened between the previous real frame and this one
         bool valid() const { return index >= 0; }
@@ -73,6 +78,7 @@ private:
     Up up_ = Up::None;  // upscaler actually running
     bool sr_active_ = false, fg_active_ = false;  // sr_active_: any upscaler running
     bool sr_failed_ = false, fg_failed_ = false;
+    bool compare_ = false;
     std::string sr_note_, fg_note_;
 
     std::unique_ptr<vfx::SuperRes> sr_;

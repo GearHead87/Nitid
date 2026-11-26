@@ -45,6 +45,10 @@ struct Settings {
     // between two unrelated pictures. (The SDK's automatic detection is always off: see spike V3.)
     bool scene_cut_detection = true;
 
+    // Side by side: the original (plainly scaled) on the left, Nitid's picture on the right, split at
+    // Engine::set_compare_split() (window output only).
+    bool compare = false;
+
     bool operator==(const Settings&) const = default;
 };
 

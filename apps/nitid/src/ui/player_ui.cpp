@@ -89,6 +89,7 @@ UiActions PlayerUi::draw(nitid::Engine& e, nitid::Settings& s, const nitid::Sour
         ImGui::TextColored(ImVec4(1, 0.45f, 0.4f, 1), "%s", error.c_str());
         ImGui::End();
     }
+    if (src && s.compare) compare_overlay(e, st);
     if (state_.show_settings) settings_panel(e, s, st, a);
     if (state_.show_stats && src) stats_panel(*src, st, s);
     if (state_.show_help) help_panel();
@@ -217,6 +218,10 @@ void PlayerUi::settings_panel(nitid::Engine& e, nitid::Settings& s, const nitid:
     else
         dim_text(std::format("Not running: {}", caps.frame_gen ? st.frame_gen_note : "needs an RTX 40 / 50 GPU and the VFX runtime"));
 
+    ImGui::SeparatorText("View");
+    ImGui::Checkbox("Compare: original | Nitid", &s.compare);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Left: the video as a normal player shows it. Right: Nitid.\nDrag on the picture to move the line. Key: X");
+
     ImGui::SeparatorText("Sound");
     float delay = float(e.audio_delay() * 1000);
     if (ImGui::SliderFloat("A/V offset", &delay, -500, 500, "%+.0f ms")) e.set_audio_delay(delay / 1000);
@@ -269,6 +274,32 @@ void PlayerUi::stats_panel(const nitid::SourceInfo& src, const nitid::Stats& st,
     else
         ImGui::Text("Sound       %s", src.audio.c_str());
     ImGui::End();
+}
+
+void PlayerUi::compare_overlay(nitid::Engine& e, const nitid::Stats& st)
+{
+    if (!st.video_w || !st.video_h) return;
+    const ImGuiIO& io = ImGui::GetIO();
+    // The engine reports the picture in framebuffer pixels; ImGui works in window units.
+    const float sx = io.DisplayFramebufferScale.x > 0 ? io.DisplayFramebufferScale.x : 1.0f;
+    const float sy = io.DisplayFramebufferScale.y > 0 ? io.DisplayFramebufferScale.y : 1.0f;
+    const float x0 = st.video_x / sx, y0 = st.video_y / sy, w = st.video_w / sx, h = st.video_h / sy;
+    // Drag anywhere on the picture (not on a panel) to move the line.
+    if (ImGui::IsMouseDown(ImGuiMouseButton_Left) && !io.WantCaptureMouse && io.MousePos.x >= x0 && io.MousePos.x <= x0 + w &&
+        io.MousePos.y >= y0 && io.MousePos.y <= y0 + h)
+        e.set_compare_split((io.MousePos.x - x0) / w);
+    const float x = x0 + e.compare_split() * w;
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    dl->AddLine(ImVec2(x, y0), ImVec2(x, y0 + h), IM_COL32(255, 255, 255, 200), 2.0f);
+    const float pad = ImGui::GetFontSize() * 0.5f;
+    auto label = [&](const char* t, float lx) {
+        ImVec2 ts = ImGui::CalcTextSize(t);
+        dl->AddRectFilled(ImVec2(lx - pad * 0.5f, y0 + pad * 0.5f), ImVec2(lx + ts.x + pad * 0.5f, y0 + pad * 1.5f + ts.y),
+                          IM_COL32(0, 0, 0, 150), 4.0f);
+        dl->AddText(ImVec2(lx, y0 + pad), IM_COL32(255, 255, 255, 230), t);
+    };
+    label("Original", x - ImGui::CalcTextSize("Original").x - pad * 1.5f);
+    label("Nitid", x + pad * 1.5f);
 }
 
 void PlayerUi::help_panel()

@@ -82,6 +82,16 @@ void Pipeline::configure(Size box, const Settings& settings)
     sr_active_ = up_ != Up::None;
 
     Size work = sr_active_ ? target : src_;
+    compare_ = settings.compare;
+    for (auto& sl : slots_) {
+        if (compare_ && sl.orig.size() != size_t(src_.w) * src_.h * 4) {
+            sl.orig = gpu::CudaBuffer(size_t(src_.w) * src_.h * 4);
+            sl.has_orig = false;
+        } else if (!compare_ && sl.orig) {
+            sl.orig = {};
+            sl.has_orig = false;
+        }
+    }
     bool ring_changed = !(work == work_);
     if (ring_changed) {
         cuda_.sync();
@@ -136,6 +146,10 @@ void Pipeline::upload(input::DecodedFrame& f, Slot& dst)
         if (f.gpu_rgba) NITID_CU(cuMemcpyDtoDAsync(to, f.gpu_rgba.ptr(), bytes, cuda_.stream));
         else NITID_CU(cuMemcpyHtoDAsync(to, f.rgba.data(), bytes, cuda_.stream));
     };
+    if (compare_ && dst.orig) {
+        copy_in(dst.orig.ptr());
+        dst.has_orig = true;
+    }
     if (up_ == Up::Vsr) {
         timed(upload_ms_, [&] { copy_in(upload_.ptr()); });
         timed(upscale_ms_, [&] {
@@ -201,9 +215,13 @@ std::optional<Output> Pipeline::produce(double position, int multiplier)
 
     Slot& c = slots_[cur_];
     Slot& n = slots_[next_];
+    auto with_orig = [&](Output o, const Slot& from) {
+        if (compare_ && from.has_orig) o.orig = from.orig.ptr(), o.orig_size = src_;
+        return o;
+    };
     if (!c.valid()) {
         // Only right after a reconfigure (ring reallocated) or at the very start: show what we have.
-        if (n.valid()) return Output{n.buf.ptr(), work_, false};
+        if (n.valid()) return with_orig(Output{n.buf.ptr(), work_, false}, n);
         return std::nullopt;
     }
     if (ended_ && !n.valid() && i > c.index) return std::nullopt;  // past the last frame
@@ -212,9 +230,9 @@ std::optional<Output> Pipeline::produce(double position, int multiplier)
     if (gen) {
         timed(frame_gen_ms_, [&] { fg_->run(c.buf.ptr(), n.buf.ptr(), p.phase, false); });
         ++generated_;
-        return Output{fg_->output(), work_, true};
+        return with_orig(Output{fg_->output(), work_, true}, p.phase < 0.5f ? c : n);  // nearest real frame
     }
-    return Output{c.buf.ptr(), work_, false};
+    return with_orig(Output{c.buf.ptr(), work_, false}, c);
 }
 
 void Pipeline::fill_stats(Stats& s) const

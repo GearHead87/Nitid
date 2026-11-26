@@ -19,6 +19,7 @@ constexpr int kWarmupFrames = 12;      // frames after a start / reconfigure ign
 RenderAhead::RenderAhead(gpu::CudaContext& cuda, Pipeline& pipe) : cuda_(cuda), pipe_(pipe)
 {
     pool_.resize(kPool);
+    pool_orig_.resize(kPool);
     for (int i = kPool - 1; i >= 0; --i) free_.push_back(i);
 }
 
@@ -137,6 +138,11 @@ void RenderAhead::worker()
             const size_t bytes = size_t(out->size.w) * out->size.h * 4;
             if (pool_[slot].size() != bytes) pool_[slot] = gpu::CudaBuffer(bytes);
             NITID_CU(cuMemcpyDtoDAsync(pool_[slot].ptr(), out->ptr, bytes, cuda_.stream));
+            if (out->orig) {
+                const size_t ob = size_t(out->orig_size.w) * out->orig_size.h * 4;
+                if (pool_orig_[slot].size() != ob) pool_orig_[slot] = gpu::CudaBuffer(ob);
+                NITID_CU(cuMemcpyDtoDAsync(pool_orig_[slot].ptr(), out->orig, ob, cuda_.stream));
+            }
             cuda_.sync();
         }
         const double ms = ms_since(t0);
@@ -155,7 +161,8 @@ void RenderAhead::worker()
             free_.push_back(slot);
             continue;
         }
-        queue_.push_back(Frame{slot, pool_[slot].ptr(), out->size, pos, out->generated});
+        queue_.push_back(Frame{slot, pool_[slot].ptr(), out->size, pos, out->generated,
+                               out->orig ? pool_orig_[slot].ptr() : 0, out->orig_size});
         // Frame-gen pacing (one frame per refresh mode): if a frame costs more than 95 % of the time it may
         // take, prepare one every `stride` refreshes instead (evenly paced), and only come back down after a
         // while below the threshold (tests/v0.3/01: 90 % flapped between 2 and 3 at HIGH).

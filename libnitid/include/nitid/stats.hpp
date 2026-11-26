@@ -20,6 +20,8 @@ struct Stats {
     std::uint32_t source_width = 0, source_height = 0;
     std::uint32_t work_width = 0, work_height = 0;      // size after upscaling (= frame gen size)
     std::uint32_t output_width = 0, output_height = 0;  // window / headless output size
+    std::int32_t video_x = 0, video_y = 0;              // window output: where the picture is (pixels)
+    std::uint32_t video_w = 0, video_h = 0;
 
     // What is actually running (a setting can be on but inactive, e.g. VSR when no upscale is needed).
     bool upscaler_active = false;

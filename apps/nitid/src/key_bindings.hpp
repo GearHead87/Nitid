@@ -33,6 +33,7 @@ enum class Action {
     Multiplier3,
     Multiplier4,
     ToggleSceneCuts,
+    ToggleCompare,
     ResetStats,
     PrintStats,
     ShowHelp,

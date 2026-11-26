@@ -31,6 +31,7 @@ constexpr std::array kBindings = {
     KeyBinding{SDLK_3, Action::Multiplier3, "3", "frame gen: 3x"},
     KeyBinding{SDLK_4, Action::Multiplier4, "4", "frame gen: 4x"},
     KeyBinding{SDLK_C, Action::ToggleSceneCuts, "C", "scene-cut detection on / off"},
+    KeyBinding{SDLK_X, Action::ToggleCompare, "X", "compare: original | Nitid side by side (drag to move the line)"},
     KeyBinding{SDLK_R, Action::ResetStats, "R", "reset stats"},
     KeyBinding{SDLK_S, Action::PrintStats, "S", "print stats to the terminal"},
     KeyBinding{SDLK_O, Action::OpenFile, "O", "open a file"},

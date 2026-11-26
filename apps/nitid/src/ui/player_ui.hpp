@@ -40,6 +40,7 @@ private:
     void settings_panel(nitid::Engine& e, nitid::Settings& s, const nitid::Stats& st, UiActions& a);
     void stats_panel(const nitid::SourceInfo& src, const nitid::Stats& st, const nitid::Settings& s);
     void help_panel();
+    void compare_overlay(nitid::Engine& e, const nitid::Stats& st);
 
     UiState state_;
     double last_activity_s_ = 0;

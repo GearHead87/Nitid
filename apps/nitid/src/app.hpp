@@ -28,6 +28,7 @@ struct AppOptions {
     double start_s = 0;          // start playing at this time
     double volume = 1.0;         // linear gain
     double audio_delay_ms = 0;   // + = sound later
+    double compare_split = 0.5;  // compare mode: where the line is (0..1)
     bool exit_at_end = false;    // quit when the video ends (default: stay on the last frame)
     double quit_after_s = 0;     // > 0: close after this long (for tests); prints a final report
     bool print_stats = false;    // one stats line per second on the terminal

@@ -34,6 +34,8 @@ int main(int argc, char** argv)
     cli.add_option("--multiplier", multiplier, "Frame gen multiplier: 2, 3, 4, or 0 = one frame per display refresh")
         ->check(CLI::Range(0, 8))
         ->capture_default_str();
+    cli.add_flag("--compare", o.settings.compare, "Side by side: original (left) | Nitid (right); X toggles");
+    cli.add_option("--compare-split", o.compare_split, "Where the compare line is, 0 to 1")->check(CLI::Range(0.0, 1.0));
     cli.add_flag("!--no-scene-cuts", o.settings.scene_cut_detection, "Turn off scene-cut detection");
     cli.add_flag("--fullscreen", o.fullscreen, "Start fullscreen");
     cli.add_option("--width", o.width, "Window width in pixels (with --height)");
