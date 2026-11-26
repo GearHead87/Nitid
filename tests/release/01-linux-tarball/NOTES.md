@@ -20,6 +20,10 @@ work on a real machine the way a user would use it?
 | Window playback (VSR HIGH + FG MEDIUM per refresh, 6 s each) | 540p, 4K AV1 and the 1080p Sintel trailer: 165.0 fps measured, 0 missed refreshes, 0 skipped |
 | Same output as the developer build | `nitid-cli bench` 540p → 1080p, VSR + FG 2x, 96 frames, lossless: **identical frames** (same framemd5, PSNR inf) |
 
+**Tarball built by GitHub Actions** (release dry run 45791817755, 2026-11-26), on the same machine: checksum OK,
+VFX effects available, Sintel trailer for 5 s with VSR + FG MEDIUM per refresh: 165.0 fps, 0 skipped,
+1 missed refresh out of 786 frames. That is start-up jitter; the local runs had 0.
+
 ## Findings
 
 - **NVIDIA's `nvidia-vfx` wheel is only on pypi.nvidia.com.** On PyPI there is just a 3.7 KB stub source
