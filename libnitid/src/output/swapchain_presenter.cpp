@@ -310,6 +310,7 @@ double SwapchainPresenter::present(CUdeviceptr frame, pipeline::Size size)
     }
 
     ++present_id_;
+    submit_s_[present_id_ % submit_s_.size()] = now_s();
     VkPresentIdKHR pid{VK_STRUCTURE_TYPE_PRESENT_ID_KHR};
     pid.swapchainCount = 1;
     pid.pPresentIds = &present_id_;
@@ -331,6 +332,10 @@ double SwapchainPresenter::present(CUdeviceptr frame, pipeline::Size size)
         shown = now_s();
         // Ignore the first half second after the swapchain is (re)made: the compositor is still settling.
         bool settling = present_id_ < settle_until_;
+        if (wr == VK_SUCCESS) {
+            double lat = shown - submit_s_[(present_id_ - kQueueAhead) % submit_s_.size()];
+            if (lat > 0 && lat < 0.2) latency_ema_s_ = latency_ema_s_ < 0 ? lat : latency_ema_s_ + (lat - latency_ema_s_) * 0.05;
+        }
         if (wr == VK_SUCCESS && !settling && last_shown_s_ > 0 && shown - last_shown_s_ > 1.5 * period_s_) ++missed_;
     }
     last_shown_s_ = shown;
@@ -342,6 +347,12 @@ double SwapchainPresenter::present(CUdeviceptr frame, pipeline::Size size)
         fps_count_ = 0;
     }
     return copy_ms;
+}
+
+double SwapchainPresenter::display_latency_s() const
+{
+    if (latency_ema_s_ < 0) return double(kQueueAhead + 1) * period_s_;
+    return latency_ema_s_ + 0.5 * period_s_;
 }
 
 } // namespace nitid::output

@@ -66,6 +66,15 @@ public:
     void seek(double seconds);
     double position() const noexcept;  // seconds
 
+    // Sound (window output). Volume is a linear gain (0..1, more amplifies); delay moves the sound against the
+    // picture (+ = later), for speakers / headphones whose real delay differs from what they report.
+    void set_volume(float gain);
+    void set_muted(bool muted);
+    void set_audio_delay(double seconds);
+    float volume() const noexcept;
+    bool muted() const noexcept;
+    double audio_delay() const noexcept;
+
     // --- Window output -------------------------------------------------------------------------
     // Shows frames in the app's window, paced to its refresh rate (Vulkan FIFO).
     void attach_window(const WindowTarget& target);

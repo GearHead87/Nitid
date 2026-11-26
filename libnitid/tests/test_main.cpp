@@ -1,5 +1,6 @@
 // libnitid unit tests: frame layout, frame selection, display clock, scene cuts, queue.
 // Tiny self-contained harness (no test framework dependency).
+#include "audio/av_sync.hpp"
 #include "core/bounded_queue.hpp"
 #include "input/scene_cut.hpp"
 #include "pipeline/frame_clock.hpp"
@@ -213,6 +214,29 @@ void test_settings()
     CHECK((upscale_target({960, 540}, {3840, 2160}) == Size{3840, 2160}));
 }
 
+void test_av_sync()
+{
+    using audio::sync_ratio;
+    CHECK(near(sync_ratio(0), 1.0));
+    CHECK(sync_ratio(0.004) < 1.0);   // sound early: play slower
+    CHECK(sync_ratio(-0.004) > 1.0);  // sound late: play faster
+    CHECK(near(sync_ratio(0.004), 0.998));
+    CHECK(near(sync_ratio(0.05), 0.99));    // capped at 1 %
+    CHECK(near(sync_ratio(-0.05), 1.01));
+    CHECK(sync_ratio(0.09) == 0);           // too far: resync
+    CHECK(sync_ratio(-0.2) == 0);
+    // Closed loop: a constant 0.05 % clock difference between the sound card and the display settles near 0.
+    double err = 0.02, ratio = 1.0;
+    bool resynced = false;
+    for (int i = 0; i < 165 * 20; ++i) {  // 20 s of refreshes
+        err += (ratio - 1.0005) * (1.0 / 165);  // sound gains (ratio - drift) seconds per second
+        ratio = sync_ratio(err);
+        resynced |= ratio == 0;
+    }
+    CHECK(!resynced);
+    CHECK(std::fabs(err) < 0.002);
+}
+
 } // namespace
 
 int main()
@@ -223,6 +247,7 @@ int main()
     test_scene_cut();
     test_queue();
     test_settings();
+    test_av_sync();
     std::printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

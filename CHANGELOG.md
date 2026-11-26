@@ -14,6 +14,9 @@ release workflow puts that section at the top of the GitHub release, followed by
   the VFX runtime; 0.06–0.08 ms per 1080p frame. NIS scales up to 2x.
 - **Seeking**: Left / Right ±5 s, PgDn / PgUp ±60 s, Home; `--start` in both apps. Frame-exact; the first frame
   after a seek takes 11–38 ms at 1080p.
+- **Sound** through PipeWire, in sync with the picture: the picture stays locked to the display and the sound
+  follows it (resampled by at most 1 %, resync after seeks / pauses). Up / Down volume, M mute, `,` / `.` move
+  the sound by 10 ms; `--volume`, `--audio-delay`, `--no-audio`. Works with Bluetooth latency (235 ms tested).
 
 ## [0.1.0] - 2026-11-26
 

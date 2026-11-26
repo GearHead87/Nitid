@@ -42,6 +42,16 @@ struct Stats {
 
     double position_s = 0;                // playback position
     StageTimes avg;
+
+    // Sound (when the source has audio and it is playing)
+    bool audio_active = false;
+    double av_sync_ms = 0;          // audio minus picture, smoothed (+ = sound early); kept near 0 by resampling
+    double av_sync_max_ms = 0;      // largest |av_sync_ms| since reset_stats(), excluding resyncs
+    double audio_speed = 1;         // resampling ratio used to follow the picture
+    double audio_latency_ms = 0;    // PipeWire's delay to the speakers
+    double display_latency_ms = 0;  // present() to on screen
+    std::uint64_t audio_resyncs = 0;    // jumps (start, seek, pause, stalls)
+    std::uint64_t audio_underruns = 0;  // audio decoding fell behind
 };
 
 } // namespace nitid

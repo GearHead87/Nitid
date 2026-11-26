@@ -33,14 +33,23 @@ std::string window_title(const nitid::SourceInfo& src, const nitid::Settings& s,
                        frame_gen_text(s, st), st.output_fps);
 }
 
+std::string audio_text(const nitid::Stats& st)
+{
+    if (!st.audio_active) return "no sound";
+    return std::format("A/V {:+.1f} ms (max {:.1f}), speed {:.4f}, resyncs {}, underruns {}, latency audio {:.0f} / "
+                       "display {:.0f} ms",
+                       st.av_sync_ms, st.av_sync_max_ms, st.audio_speed, st.audio_resyncs, st.audio_underruns,
+                       st.audio_latency_ms, st.display_latency_ms);
+}
+
 std::string stats_line(const nitid::Settings& s, const nitid::Stats& st)
 {
     return std::format("t={:.1f}s | {}x{}@{:.3f} -> {}x{} (window {}x{} @ {:.0f} Hz) | {} | {} | out {:.1f} fps | "
-                       "frames {} (generated {}) | skipped {} | missed refreshes {} | cuts {}",
+                       "frames {} (generated {}) | skipped {} | missed refreshes {} | cuts {} | {}",
                        st.position_s, st.source_width, st.source_height, st.source_fps, st.work_width, st.work_height,
                        st.output_width, st.output_height, st.display_hz, upscaler_text(s, st), frame_gen_text(s, st),
                        st.output_fps, st.output_frames, st.generated_frames, st.skipped_frames, st.missed_refreshes,
-                       st.scene_cuts);
+                       st.scene_cuts, audio_text(st));
 }
 
 std::string stats_report(const nitid::SourceInfo& src, const nitid::Settings& s, const nitid::Stats& st)
@@ -56,6 +65,7 @@ std::string stats_report(const nitid::SourceInfo& src, const nitid::Settings& s,
                      "{} scene cuts\n",
                      st.position_s, st.output_frames, st.generated_frames, st.source_frames, st.skipped_frames, st.scene_cuts);
     r += std::format("Display:  {:.1f} fps measured, {} missed refreshes\n", st.output_fps, st.missed_refreshes);
+    r += std::format("Sound:    {}\n", audio_text(st));
     r += std::format("Avg ms:   decode+convert {:.2f} | upload {:.2f} | upscale {:.2f} | frame gen {:.2f} | output {:.2f}\n",
                      st.avg.decode_ms, st.avg.upload_ms, st.avg.upscale_ms, st.avg.frame_gen_ms, st.avg.output_ms);
     return r;

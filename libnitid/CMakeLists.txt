@@ -28,7 +28,9 @@ find_package(Vulkan REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 find_package(Threads REQUIRED)
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil libswscale)
+pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil libswscale libswresample)
+# PipeWire: headers only (the library is loaded at run time, see src/platform/pipewire_lib.cpp)
+pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
 
 set(NITID_VFX_INCLUDE_DIR "${NITID_REPO_ROOT}/third_party/Maxine-VFX-SDK/nvvfx/include"
     CACHE PATH "NVIDIA VFX SDK C headers (nvVideoEffects.h); scripts/fetch-sdks.sh downloads them")
@@ -95,6 +97,9 @@ add_library(libnitid
   # input: frame sources (files now; screen capture and capture cards later)
   src/input/ffmpeg_file_source.cpp
   src/input/scene_cut.cpp
+  # audio: sound playback in sync with the picture (PipeWire)
+  src/audio/audio_player.cpp
+  src/platform/pipewire_lib.cpp
   # vfx: NVIDIA VFX SDK effects
   src/vfx/vfx_api.cpp
   src/vfx/super_res.cpp
@@ -135,7 +140,11 @@ target_include_directories(libnitid PRIVATE
 target_include_directories(libnitid SYSTEM PRIVATE
   ${NITID_VFX_INCLUDE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party/nis   # NIS_Config.h (MIT)
+  ${PIPEWIRE_INCLUDE_DIRS}
 )
+target_compile_options(libnitid PRIVATE ${PIPEWIRE_CFLAGS_OTHER})
+# Catch accidental direct use of run-time-loaded libraries (PipeWire, VFX): every symbol must resolve.
+target_link_options(libnitid PRIVATE -Wl,--no-undefined)
 
 target_link_libraries(libnitid
   PUBLIC  Vulkan::Vulkan

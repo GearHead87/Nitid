@@ -94,9 +94,12 @@ int App::run()
     target.refresh_hz = dm && dm->refresh_rate > 1 ? dm->refresh_rate : 60;
     engine_->attach_window(target);
     engine_->set_settings(settings_);
+    engine_->set_volume(float(opts_.volume));
+    engine_->set_audio_delay(opts_.audio_delay_ms / 1000.0);
 
     source_ = engine_->open_file(opts_.file, opts_.open);
     if (opts_.start_s > 0) engine_->seek(opts_.start_s);
+    std::println("Sound: {}", source_.audio);
     if (opts_.width <= 0 || opts_.height <= 0) {
         // Re-shape the window to the video's aspect ratio within 80% of the screen.
         double s = std::min(usable.w * 0.8 / source_.width, usable.h * 0.8 / source_.height);
@@ -137,6 +140,17 @@ int App::run()
             engine_->seek(opts_.test_seeks.front().second);
             opts_.test_seeks.erase(opts_.test_seeks.begin());
         }
+        if (!opts_.test_pauses.empty()) {
+            auto& [at, len] = opts_.test_pauses.front();
+            double now = seconds_since(t_start);
+            if (!engine_->paused() && now >= at) {
+                std::println("test pause at {:.2f} s for {:.2f} s", engine_->position(), len);
+                engine_->set_paused(true);
+            } else if (engine_->paused() && now >= at + len) {
+                engine_->set_paused(false);
+                opts_.test_pauses.erase(opts_.test_pauses.begin());
+            }
+        }
         if (!engine_->render_frame()) {
             ended = true;
             break;
@@ -176,6 +190,11 @@ void App::handle(Action a)
         case Action::SeekBackLong: engine_->seek(engine_->position() - 60); break;
         case Action::SeekForwardLong: engine_->seek(engine_->position() + 60); break;
         case Action::SeekStart: engine_->seek(0); break;
+        case Action::VolumeUp: engine_->set_volume(std::min(2.0f, engine_->volume() + 0.05f)); break;
+        case Action::VolumeDown: engine_->set_volume(std::max(0.0f, engine_->volume() - 0.05f)); break;
+        case Action::ToggleMute: engine_->set_muted(!engine_->muted()); break;
+        case Action::AudioEarlier: engine_->set_audio_delay(engine_->audio_delay() - 0.010); break;
+        case Action::AudioLater: engine_->set_audio_delay(engine_->audio_delay() + 0.010); break;
         case Action::ToggleFullscreen:
             fullscreen_ = !fullscreen_;
             SDL_SetWindowFullscreen(window_, fullscreen_);

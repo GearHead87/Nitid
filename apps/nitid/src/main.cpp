@@ -39,6 +39,9 @@ int main(int argc, char** argv)
     cli.add_option("--width", o.width, "Window width in pixels (with --height)");
     cli.add_option("--height", o.height, "Window height in pixels (with --width)");
     cli.add_option("--start", o.start_s, "Start at this time in seconds");
+    cli.add_flag("!--no-audio", o.open.audio, "Play without sound");
+    cli.add_option("--volume", o.volume, "Volume, 0 to 2 (1 = as recorded)")->check(CLI::Range(0.0, 2.0))->capture_default_str();
+    cli.add_option("--audio-delay", o.audio_delay_ms, "Move the sound against the picture, in ms (+ = later)");
     cli.add_flag("--loop", o.open.loop, "Play again from the start at the end");
     cli.add_flag("!--sw-decode", o.open.hw_decode, "Decode in software instead of NVDEC");
     cli.add_option("--source-step", o.open.source_step,
@@ -51,6 +54,9 @@ int main(int argc, char** argv)
         ->expected(1, -1);
     std::vector<std::string> test_seeks;
     cli.add_option("--test-seek", test_seeks, "Tests: seek while playing, AT:TO = after AT s of the run, go to TO s")
+        ->expected(1, -1);
+    std::vector<std::string> test_pauses;
+    cli.add_option("--test-pause", test_pauses, "Tests: pause while playing, AT:LEN = after AT s of the run, for LEN s")
         ->expected(1, -1);
     cli.add_option("--capture-prefix", o.capture_prefix, "File name prefix for --capture-at images");
     CLI11_PARSE(cli, argc, argv);
@@ -69,6 +75,15 @@ int main(int argc, char** argv)
         o.test_seeks.emplace_back(at, to);
     }
     std::sort(o.test_seeks.begin(), o.test_seeks.end());
+    for (const auto& t : test_pauses) {
+        double at = 0, len = 0;
+        if (std::sscanf(t.c_str(), "%lf:%lf", &at, &len) != 2) {
+            std::println(stderr, "--test-pause wants AT:LEN, got {}", t);
+            return 2;
+        }
+        o.test_pauses.emplace_back(at, len);
+    }
+    std::sort(o.test_pauses.begin(), o.test_pauses.end());
     try {
         nitid_app::App app(std::move(o));
         return app.run();

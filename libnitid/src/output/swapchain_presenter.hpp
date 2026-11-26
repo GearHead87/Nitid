@@ -32,6 +32,9 @@ public:
     void capture_next(const std::string& ppm_path) { capture_path_ = ppm_path; }
 
     uint64_t missed_refreshes() const { return missed_; }
+    // How long after present() a frame reaches the screen (measured with present-wait, + half a refresh for
+    // scan-out). Used to line the sound up with the picture.
+    double display_latency_s() const;
     double measured_fps() const { return measured_fps_; }
     void set_refresh_period(double s) { period_s_ = s; }
     void reset_stats() { missed_ = 0; }
@@ -85,6 +88,8 @@ private:
     uint64_t missed_ = 0;
     uint64_t settle_until_ = 0;  // present id before which misses are not counted
     double measured_fps_ = 0;
+    std::array<double, 8> submit_s_{};  // when each present id was submitted (id % 8)
+    double latency_ema_s_ = -1;
     double fps_window_start_ = -1;
     int fps_count_ = 0;
 };

@@ -14,6 +14,8 @@ struct SourceInfo {
     std::uint32_t height = 0;
     double fps = 0;           // frame rate the engine plays at (after source_step)
     double duration_s = 0;    // 0 if unknown
+    std::string audio;        // e.g. "aac 48000 Hz 2 ch -> PipeWire 1.6.11", or why there is no sound
+    bool has_audio = false;   // sound is playing (window output only)
 };
 
 struct OpenOptions {
@@ -22,6 +24,7 @@ struct OpenOptions {
     int source_step = 1;
     bool loop = false;        // start again at the end instead of stopping
     bool hw_decode = true;    // try NVDEC first, fall back to software decoding
+    bool audio = true;        // play the sound (window output only; headless output never plays sound)
 };
 
 } // namespace nitid

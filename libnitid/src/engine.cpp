@@ -1,6 +1,7 @@
 #include <nitid/engine.hpp>
 #include <nitid/error.hpp>
 
+#include "audio/audio_player.hpp"
 #include "core/log.hpp"
 #include "core/running_average.hpp"
 #include "gpu/cuda_context.hpp"
@@ -33,7 +34,12 @@ struct Engine::Impl {
     std::unique_ptr<output::SwapchainPresenter> presenter;
     std::unique_ptr<input::FfmpegFileSource> source;
     std::unique_ptr<pipeline::Pipeline> pipe;
+    std::unique_ptr<audio::AudioPlayer> audio;
     OpenOptions open_options;
+    SourceInfo info;
+    float volume = 1;
+    bool muted = false;
+    double audio_delay = 0;
 
     Settings settings;
     bool paused = false;
@@ -111,6 +117,7 @@ Engine::~Engine()
 {
     if (!impl_) return;
     // Order matters: stop decoding, release GPU users, then the contexts.
+    impl_->audio.reset();
     impl_->pipe.reset();
     impl_->source.reset();
     impl_->presenter.reset();
@@ -150,13 +157,34 @@ SourceInfo Engine::open_file(const std::string& path, const OpenOptions& options
     m.clock.reset();
     m.last_output.reset();
     m.headless_n = 0;
+    m.info = m.source->info();
+    if (!m.presenter) {
+        m.info.audio = "not played (no window)";
+    } else if (!options.audio) {
+        m.info.audio = "off";
+    } else {
+        std::string note;
+        m.audio = audio::AudioPlayer::open(path, &note);
+        if (m.audio) {
+            m.audio->set_volume(m.volume);
+            m.audio->set_muted(m.muted);
+            m.audio->set_delay(m.audio_delay);
+            m.audio->set_paused(m.paused);
+            m.info.audio = m.audio->stats().description;
+            m.info.has_audio = true;
+        } else {
+            m.info.audio = note;
+            log::info("No sound: {}", note);
+        }
+    }
     reset_stats();
-    return m.source->info();
+    return m.info;
 }
 
 void Engine::close_source()
 {
     Impl& m = *impl_;
+    m.audio.reset();
     m.pipe.reset();
     m.source.reset();
     m.last_output.reset();
@@ -192,6 +220,17 @@ Stats Engine::stats() const
     }
     s.position_s = m.position_s;
     s.avg.output_ms = m.output_ms.value();
+    if (m.presenter) s.display_latency_ms = m.presenter->display_latency_s() * 1000;
+    if (m.audio) {
+        auto a = m.audio->stats();
+        s.audio_active = true;
+        s.av_sync_ms = a.sync_error_ms;
+        s.av_sync_max_ms = a.max_sync_error_ms;
+        s.audio_speed = a.speed;
+        s.audio_latency_ms = a.latency_ms;
+        s.audio_resyncs = a.resyncs;
+        s.audio_underruns = a.underruns;
+    }
     return s;
 }
 
@@ -202,9 +241,36 @@ void Engine::reset_stats()
     if (m.presenter) m.presenter->reset_stats();
     m.output_ms.reset();
     m.output_frames = 0;
+    if (m.audio) m.audio->reset_stats();
 }
 
-void Engine::set_paused(bool p) { impl_->paused = p; }
+void Engine::set_paused(bool p)
+{
+    impl_->paused = p;
+    if (impl_->audio) impl_->audio->set_paused(p);
+}
+
+void Engine::set_volume(float g)
+{
+    impl_->volume = std::max(0.0f, g);
+    if (impl_->audio) impl_->audio->set_volume(impl_->volume);
+}
+
+void Engine::set_muted(bool mu)
+{
+    impl_->muted = mu;
+    if (impl_->audio) impl_->audio->set_muted(mu);
+}
+
+void Engine::set_audio_delay(double s)
+{
+    impl_->audio_delay = s;
+    if (impl_->audio) impl_->audio->set_delay(s);
+}
+
+float Engine::volume() const noexcept { return impl_->volume; }
+bool Engine::muted() const noexcept { return impl_->muted; }
+double Engine::audio_delay() const noexcept { return impl_->audio_delay; }
 bool Engine::paused() const noexcept { return impl_->paused; }
 
 void Engine::seek(double seconds)
@@ -217,6 +283,7 @@ void Engine::seek(double seconds)
     m.cuda->make_current();
     m.seek_started = std::chrono::steady_clock::now();
     m.source->seek(seconds);
+    if (m.audio) m.audio->seek(seconds);
     m.pipe->restart();
     m.clock.seek(seconds);
     m.last_output.reset();
@@ -271,9 +338,7 @@ bool Engine::render_frame()
     } else {
         out = m.pipe->produce(position, mult);
         if (!out && m.open_options.loop) {
-            m.source->restart();
-            m.pipe->restart();
-            m.clock.reset();
+            seek(0);  // same path as a user seek: sound and clock restart with the first frame
             position = 0;
             out = m.pipe->produce(0, mult);
         }
@@ -285,6 +350,14 @@ bool Engine::render_frame()
     if (m.seek_started) {
         log::info("seek to {:.3f} s: first frame ready after {:.0f} ms", m.position_s, ms_since(*m.seek_started));
         m.seek_started.reset();
+        // Start the clock when the first frame is ready, not when the seek began: otherwise the picture would
+        // jump ahead by the decoding time and the sound (lined up with this frame) would lag by as much.
+        m.clock.seek(m.position_s);
+    }
+    if (m.audio) {
+        // This frame reaches the screen about display_latency after present(): the sound for it should too.
+        auto when = std::chrono::steady_clock::now() + std::chrono::duration<double>(m.presenter->display_latency_s());
+        m.audio->sync(m.position_s, std::chrono::duration_cast<std::chrono::nanoseconds>(when.time_since_epoch()).count());
     }
     m.output_ms.add(m.presenter->present(out->ptr, out->size));
     m.count_output();
