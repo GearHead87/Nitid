@@ -72,6 +72,11 @@ UiActions PlayerUi::draw(nitid::Engine& e, nitid::Settings& s, const nitid::Sour
         ImGui::Spacing();
         ImGui::TextUnformatted("Drop a video file on this window, or");
         if (ImGui::Button("Open a file...")) a.open_file = true;
+        ImGui::SameLine();
+        if (ImGui::Button("Capture the screen...")) a.capture_screen = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Shows a screen or window (chosen in the desktop's dialog) enhanced in this window.\n"
+                              "Put Nitid on another screen than the one it captures.");
         if (!error.empty()) {
             ImGui::Spacing();
             ImGui::TextColored(ImVec4(1, 0.45f, 0.4f, 1), "%s", error.c_str());
@@ -107,6 +112,29 @@ void PlayerUi::control_bar(nitid::Engine& e, const nitid::SourceInfo& src, bool 
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoBringToFrontOnFocus);
 
+    if (src.live) {
+        // Live input: no position or seek bar; what is being captured instead.
+        const nitid::Stats st = e.stats();
+        if (ImGui::Button(e.paused() ? "Play" : "Pause", ImVec2(ImGui::CalcTextSize("Replay").x + style.FramePadding.x * 2, 0)))
+            e.set_paused(!e.paused());
+        ImGui::SameLine();
+        ImGui::TextColored(st.capture_failed ? ImVec4(1, 0.45f, 0.4f, 1) : ImVec4(1, 0.35f, 0.3f, 1), "LIVE");
+        ImGui::SameLine();
+        ImGui::TextUnformatted(std::format("{}  |  {:.0f} fps in, {:.0f} ms to screen", st.capture_status, st.capture_fps,
+                                           st.live_latency_ms).c_str());
+        ImGui::SameLine(ImGui::GetContentRegionMax().x - (ImGui::CalcTextSize("Settings").x + ImGui::CalcTextSize("Stats").x +
+                                                          ImGui::CalcTextSize("?").x + ImGui::CalcTextSize("Fullscreen").x +
+                                                          style.FramePadding.x * 8 + style.ItemSpacing.x * 3));
+        if (ImGui::Button("Settings")) state_.show_settings = !state_.show_settings;
+        ImGui::SameLine();
+        if (ImGui::Button("Stats")) state_.show_stats = !state_.show_stats;
+        ImGui::SameLine();
+        if (ImGui::Button("?")) state_.show_help = !state_.show_help;
+        ImGui::SameLine();
+        if (ImGui::Button(fullscreen ? "Window" : "Fullscreen")) a.toggle_fullscreen = true;
+        ImGui::End();
+        return;
+    }
     const bool playing = !e.paused() && !ended;
     if (ImGui::Button(playing ? "Pause" : (ended ? "Replay" : "Play"), ImVec2(ImGui::CalcTextSize("Replay").x + style.FramePadding.x * 2, 0))) {
         if (ended) {
@@ -233,6 +261,14 @@ void PlayerUi::settings_panel(nitid::Engine& e, nitid::Settings& s, const nitid:
     ImGui::SeparatorText("View");
     ImGui::Checkbox("Compare: original | Nitid", &s.compare);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Left: the video as a normal player shows it. Right: Nitid.\nDrag on the picture to move the line. Key: X");
+
+    ImGui::SeparatorText("Screen capture");
+    static const std::pair<LiveMode, const char*> lm[] = {{LiveMode::LowLatency, "Low latency (newest frame)"},
+                                                         {LiveMode::Smooth, "Smooth (frame generation)"}};
+    choice("Live mode", s.live_mode, lm);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Smooth generates frames between captured ones: smoother motion, about one captured frame later. Key: L");
+    if (st.live) dim_text(std::format("{} | {:.0f} ms from capture to screen", st.capture_status, st.live_latency_ms));
 
     ImGui::SeparatorText("Sound");
     float delay = float(e.audio_delay() * 1000);

@@ -14,6 +14,7 @@ namespace nitid_app {
 // What the UI asks the app to do (things the app owns: files, window, settings).
 struct UiActions {
     bool open_file = false;          // show the file dialog
+    bool capture_screen = false;     // start screen capture
     bool toggle_fullscreen = false;
     bool settings_changed = false;   // apply PlayerUi's copy of the settings
     bool quit = false;

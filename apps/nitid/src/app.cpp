@@ -98,7 +98,7 @@ bool App::open(const std::string& path)
 void App::open_live(const std::string& target)
 {
     try {
-        source_ = engine_->open_pipewire(target);
+        source_ = target.empty() ? engine_->open_screen_capture() : engine_->open_pipewire(target);
     } catch (const nitid::Error& e) {
         error_ = e.what();
         has_source_ = false;
@@ -193,7 +193,8 @@ int App::run()
     }
 
     if (opts_.fullscreen) handle(Action::ToggleFullscreen);
-    if (!opts_.pipewire.empty()) open_live(opts_.pipewire);
+    if (opts_.capture_screen) open_live("");
+    else if (!opts_.pipewire.empty()) open_live(opts_.pipewire);
     else if (!opts_.file.empty() && open(opts_.file) && opts_.start_s > 0) engine_->seek(opts_.start_s);
     SDL_SyncWindow(window_);
     sync_display();
@@ -244,6 +245,7 @@ int App::run()
         overlay_->end_frame();
         if (ua.settings_changed) apply_settings();
         if (ua.open_file) show_open_dialog();
+        if (ua.capture_screen) open_live("");
         if (ua.toggle_fullscreen) handle(Action::ToggleFullscreen);
         if (fullscreen_ && !ui_.controls_shown()) SDL_HideCursor();
         else SDL_ShowCursor();
@@ -374,6 +376,9 @@ void App::handle(Action a)
         case Action::Multiplier4: settings_.frame_gen_multiplier = 4; break;
         case Action::ToggleSceneCuts: settings_.scene_cut_detection = !settings_.scene_cut_detection; break;
         case Action::ToggleCompare: settings_.compare = !settings_.compare; break;
+        case Action::ToggleLiveMode:
+            settings_.live_mode = settings_.live_mode == LiveMode::Smooth ? LiveMode::LowLatency : LiveMode::Smooth;
+            break;
         case Action::ResetStats: engine_->reset_stats(); break;
         case Action::PrintStats: std::println("{}", stats_line(settings_, engine_->stats())); break;
         default: break;

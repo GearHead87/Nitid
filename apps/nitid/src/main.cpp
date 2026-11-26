@@ -21,7 +21,7 @@ int main(int argc, char** argv)
 
     CLI::App cli{"Nitid: AI upscaling and frame generation for video (NVIDIA RTX, Linux)", "nitid"};
     cli.set_version_flag("--version", std::string(nitid::version()));
-    cli.add_option("file", o.file, "Video file to play (or open one from the window)")->check(CLI::ExistingFile);
+    cli.add_option("file", o.file, "Video file to play (or open one from the window, or --capture-screen)")->check(CLI::ExistingFile);
     cli.add_option("--upscale", upscale, "Upscaling: VSR (AI) quality low, medium, high, ultra; fsr; nis; off")
         ->check(CLI::IsMember({"off", "low", "medium", "high", "ultra", "fsr", "nis"}))
         ->capture_default_str();
@@ -44,6 +44,7 @@ int main(int argc, char** argv)
     cli.add_flag("--fullscreen", o.fullscreen, "Start fullscreen");
     cli.add_option("--width", o.width, "Window width in pixels (with --height)");
     cli.add_option("--height", o.height, "Window height in pixels (with --width)");
+    cli.add_flag("--capture-screen", o.capture_screen, "Capture the screen (the desktop asks which screen or window) instead of a file");
     cli.add_option("--pipewire", o.pipewire, "Live input from a PipeWire video node (id, name or serial) instead of a file");
     std::string live_mode = "low-latency";
     cli.add_option("--live-mode", live_mode, "Live input: low-latency (newest frame) or smooth (frame generation, ~1 frame later)")

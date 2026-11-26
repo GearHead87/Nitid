@@ -85,6 +85,7 @@ struct PipeWireCapture::Impl {
     Connect connect;
     std::thread setup;
     std::atomic<bool> stop{false};
+    std::shared_ptr<void> keep_alive;
 
     // PipeWire
     pw_thread_loop* loop = nullptr;
@@ -150,6 +151,7 @@ struct PipeWireCapture::Impl {
         {
             std::lock_guard l(m);
             if (!t.name.empty()) name = t.name;
+            keep_alive = t.keep_alive;
         }
         if (vk.dma_buf_import && vk.capture_queue != vk.queue) {
             mods_bgr = importable_modifiers(vk.phys, VK_FORMAT_B8G8R8A8_UNORM);
@@ -448,6 +450,7 @@ struct PipeWireCapture::Impl {
         if (pw && context) pw->context_destroy(context);
         if (pw && loop) pw->thread_loop_destroy(loop);
         stream = nullptr, core = nullptr, context = nullptr, loop = nullptr;
+        keep_alive.reset();  // ends the portal session
         cuCtxSetCurrent(cuda.ctx);
         clear_imports();
         if (fence) vkDestroyFence(vk.device, fence, nullptr);

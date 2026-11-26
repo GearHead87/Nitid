@@ -30,6 +30,7 @@ public:
         uint32_t node = 0xffffffffu;  // PW_ID_ANY
         std::string target;
         std::string name;             // shown as the source name
+        std::shared_ptr<void> keep_alive;  // e.g. the portal session: released when the capture stops
     };
     // Runs on a setup thread (the portal may show a permission dialog and wait for the user). Returns false and
     // sets `error` on failure; must return promptly once `stop` is set.

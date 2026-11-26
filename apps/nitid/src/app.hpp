@@ -22,6 +22,7 @@ class Overlay;
 struct AppOptions {
     std::string file;            // empty: start with the "open a file" screen
     std::string pipewire;        // live input from a PipeWire node (id, name or serial) instead of a file
+    bool capture_screen = false; // live input: screen capture through the desktop portal
     nitid::Settings settings;
     nitid::OpenOptions open;
     bool fullscreen = false;
@@ -58,7 +59,7 @@ public:
 private:
     void handle(Action a);
     bool open(const std::string& path);
-    void open_live(const std::string& pipewire_target);
+    void open_live(const std::string& pipewire_target);  // empty: screen capture through the portal
     void show_open_dialog();
     void update_title();
     void sync_display();

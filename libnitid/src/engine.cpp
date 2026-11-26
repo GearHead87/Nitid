@@ -9,6 +9,7 @@
 #include "gpu/vulkan_context.hpp"
 #include "input/ffmpeg_file_source.hpp"
 #include "input/pipewire_capture.hpp"
+#include "input/screencast_portal.hpp"
 #include "output/swapchain_presenter.hpp"
 #include "pipeline/frame_clock.hpp"
 #include "pipeline/pipeline.hpp"
@@ -66,6 +67,27 @@ struct Engine::Impl {
     double fps_window_start = -1;
     uint64_t fps_window_frames = 0;
     double measured_fps = 0;
+
+    SourceInfo open_live(input::PipeWireCapture::Connect connect, Engine& self)
+    {
+        if (!presenter) throw Error("live input needs a window (attach_window first)");
+        cuda->make_current();
+        self.close_source();
+        auto cap = std::make_unique<input::PipeWireCapture>(std::move(connect), *vk, *cuda, *kernels);
+        capture = cap.get();
+        source = std::move(cap);
+        pipe = std::make_unique<pipeline::Pipeline>(*cuda, vfx, caps.super_res, caps.frame_gen);
+        pipe->set_source(source.get());
+        info = source->info();
+        info.live = true;
+        info.audio = "not captured (picture only)";
+        live_latency_ms = 0;
+        live_start_s = 0;
+        position_s = 0;
+        last_live.reset();
+        self.reset_stats();
+        return info;
+    }
 
     void ensure_device(VkSurfaceKHR surface)
     {
@@ -198,32 +220,30 @@ SourceInfo Engine::open_file(const std::string& path, const OpenOptions& options
 
 SourceInfo Engine::open_pipewire(const std::string& target)
 {
-    Impl& m = *impl_;
-    if (!m.presenter) throw Error("live input needs a window (attach_window first)");
-    m.cuda->make_current();
-    close_source();
-    input::PipeWireCapture::Connect connect = [target](input::PipeWireCapture::Target& t, std::string&, const std::atomic<bool>&,
-                                                       const std::function<void(std::string)>&) {
+    return impl_->open_live([target](input::PipeWireCapture::Target& t, std::string&, const std::atomic<bool>&,
+                                     const std::function<void(std::string)>&) {
         // A number is a node id; anything else a node name or serial.
         if (!target.empty() && target.find_first_not_of("0123456789") == std::string::npos) t.node = uint32_t(std::stoul(target));
         else t.target = target;
         t.name = "PipeWire " + target;
         return true;
-    };
-    auto cap = std::make_unique<input::PipeWireCapture>(std::move(connect), *m.vk, *m.cuda, *m.kernels);
-    m.capture = cap.get();
-    m.source = std::move(cap);
-    m.pipe = std::make_unique<pipeline::Pipeline>(*m.cuda, m.vfx, m.caps.super_res, m.caps.frame_gen);
-    m.pipe->set_source(m.source.get());
-    m.info = m.source->info();
-    m.info.live = true;
-    m.info.audio = "not captured (picture only)";
-    m.live_latency_ms = 0;
-    m.live_start_s = 0;
-    m.position_s = 0;
-    m.last_live.reset();
-    reset_stats();
-    return m.info;
+    }, *this);
+}
+
+SourceInfo Engine::open_screen_capture(const ScreenCaptureOptions& options)
+{
+    return impl_->open_live([options](input::PipeWireCapture::Target& t, std::string& error, const std::atomic<bool>& stop,
+                                      const std::function<void(std::string)>& status) {
+        auto portal = std::make_shared<input::ScreenCastPortal>();
+        input::ScreenCastPortal::Options o{options.monitors, options.windows, options.cursor, options.remember};
+        std::string token = options.remember ? input::ScreenCastPortal::load_token() : std::string();
+        status("asking the desktop for permission");
+        if (!portal->start(o, token, t.fd, t.node, error, stop, status)) return false;
+        if (options.remember && !token.empty()) input::ScreenCastPortal::save_token(token);
+        t.name = "Screen capture";
+        t.keep_alive = portal;
+        return true;
+    }, *this);
 }
 
 void Engine::close_source()

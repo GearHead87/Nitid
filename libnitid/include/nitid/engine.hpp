@@ -52,6 +52,9 @@ public:
     // Live input from PipeWire: `target` is a node id, name or serial (e.g. a test pattern from gst-launch). Returns
     // at once; frames start when the stream connects (Stats::capture_status). Window output only.
     SourceInfo open_pipewire(const std::string& target);
+    // Screen capture: the desktop's dialog asks which screen or window to share (not again if it remembered the
+    // choice). Returns at once; Stats::capture_status shows progress. Window output only.
+    SourceInfo open_screen_capture(const ScreenCaptureOptions& options = {});
     void close_source();
     bool has_source() const noexcept;
 

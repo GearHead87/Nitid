@@ -13,6 +13,9 @@ release workflow puts that section at the top of the GitHub release, followed by
   upscaled and shown at the display rate. `--live-mode low-latency` (default: the newest frame, ~28 ms from
   arrival to screen with a 60 fps source) or `smooth` (frame generation between captured frames, one frame later).
   DMA-BUF frames are imported through Vulkan; shared memory works too.
+- **Screen capture** (`nitid --capture-screen`, or "Capture the screen..." in the window): the desktop's portal asks
+  which screen or window to share and remembers the choice. Zero-copy DMA-BUF from the compositor (0.33 ms per
+  1440p frame), 165 fps, ~22 ms from capture to screen in low-latency mode. `L` switches low latency / smooth.
 
 ## [0.3.0] - 2026-11-26
 

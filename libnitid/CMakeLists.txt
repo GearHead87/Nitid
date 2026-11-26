@@ -31,6 +31,8 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil libswscale libswresample)
 # PipeWire: headers only (the library is loaded at run time, see src/platform/pipewire_lib.cpp)
 pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
+# D-Bus: headers only (loaded at run time, src/platform/dbus_lib.cpp; screen capture permission)
+pkg_check_modules(DBUS REQUIRED dbus-1)
 
 set(NITID_VFX_INCLUDE_DIR "${NITID_REPO_ROOT}/third_party/Maxine-VFX-SDK/nvvfx/include"
     CACHE PATH "NVIDIA VFX SDK C headers (nvVideoEffects.h); scripts/fetch-sdks.sh downloads them")
@@ -98,6 +100,8 @@ add_library(libnitid
   src/input/ffmpeg_file_source.cpp
   src/input/scene_cut.cpp
   src/input/pipewire_capture.cpp   # live input: screen capture / PipeWire video (DMA-BUF or shared memory)
+  src/input/screencast_portal.cpp  # screen capture permission (desktop portal over D-Bus)
+  src/platform/dbus_lib.cpp        # libdbus loaded at run time
   # audio: sound playback in sync with the picture (PipeWire)
   src/audio/audio_player.cpp
   src/platform/pipewire_lib.cpp
@@ -143,6 +147,7 @@ target_include_directories(libnitid SYSTEM PRIVATE
   ${NITID_VFX_INCLUDE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party/nis   # NIS_Config.h (MIT)
   ${PIPEWIRE_INCLUDE_DIRS}
+  ${DBUS_INCLUDE_DIRS}
 )
 target_compile_options(libnitid PRIVATE ${PIPEWIRE_CFLAGS_OTHER})
 # Catch accidental direct use of run-time-loaded libraries (PipeWire, VFX): every symbol must resolve.

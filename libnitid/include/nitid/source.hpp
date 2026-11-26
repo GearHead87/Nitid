@@ -28,4 +28,13 @@ struct OpenOptions {
     bool audio = true;        // play the sound (window output only; headless output never plays sound)
 };
 
+// Screen capture through the desktop's portal (it asks the user which screen or window to share).
+struct ScreenCaptureOptions {
+    bool monitors = true;   // offer whole screens
+    bool windows = true;    // offer single windows
+    bool cursor = true;     // include the mouse pointer
+    bool remember = true;   // the desktop remembers the choice: no dialog next time (restore token, kept in
+                            // $XDG_STATE_HOME/nitid/screencast-token)
+};
+
 } // namespace nitid
