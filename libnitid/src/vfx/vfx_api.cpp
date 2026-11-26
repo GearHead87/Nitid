@@ -28,12 +28,37 @@ constexpr const char* kPreload[] = {
     "libNVCVImage.so", "libnvngxruntime.so", "libVideoFXLocal.so", "libVideoFX.so",
 };
 
+// nitid-setup-vfx unpacks NVIDIA's nvidia-vfx wheel into <root>/nitid/vfx and keeps the wheel's layout: the
+// libraries in nvvfx/libs find the CUDA runtime through their RPATH ($ORIGIN/../../nvidia_vfx.libs).
+constexpr const char* kWheelLibs = "nitid/vfx/nvvfx/libs";
+
+// Per-user install: $XDG_DATA_HOME (default ~/.local/share)/nitid/vfx.
+std::string user_data_dir()
+{
+    if (const char* x = std::getenv("XDG_DATA_HOME"); x && *x) return (fs::path(x) / kWheelLibs).string();
+    if (const char* h = std::getenv("HOME"); h && *h) return (fs::path(h) / ".local/share" / kWheelLibs).string();
+    return {};
+}
+
+// System-wide install next to libnitid: <libdir>/nitid/vfx (e.g. /usr/lib/nitid/vfx, or a tarball's lib/).
+std::string next_to_library_dir()
+{
+    Dl_info info{};
+    if (!dladdr(reinterpret_cast<void*>(&user_data_dir), &info) || !info.dli_fname) return {};
+    std::error_code ec;
+    auto lib = fs::canonical(info.dli_fname, ec);
+    if (ec) return {};
+    return (lib.parent_path() / kWheelLibs).string();
+}
+
 std::vector<std::string> candidate_dirs(const std::string& explicit_dir)
 {
     std::vector<std::string> dirs;
     if (!explicit_dir.empty()) dirs.push_back(explicit_dir);
     if (const char* e = std::getenv("NITID_VFX_DIR"); e && *e) dirs.emplace_back(e);
-    if (*NITID_VFX_DEFAULT_DIR) dirs.emplace_back(NITID_VFX_DEFAULT_DIR);
+    for (auto d : {user_data_dir(), next_to_library_dir()})
+        if (!d.empty() && fs::exists(fs::path(d) / "libVideoFX.so")) dirs.push_back(d);
+    if (*NITID_VFX_DEFAULT_DIR) dirs.emplace_back(NITID_VFX_DEFAULT_DIR);  // developer builds
     return dirs;
 }
 
@@ -63,7 +88,7 @@ std::shared_ptr<const Api> load_api(const std::string& explicit_dir, std::string
     tried = true;
 
     auto dirs = candidate_dirs(explicit_dir);
-    if (dirs.empty()) cached_error = "VFX runtime folder not set (set NITID_VFX_DIR)";
+    if (dirs.empty()) cached_error = "VFX runtime not installed (run nitid-setup-vfx, or set NITID_VFX_DIR)";
     for (const auto& d : dirs) {
         if (!fs::exists(fs::path(d) / "libVideoFX.so")) {
             cached_error = "libVideoFX.so not found in " + d;

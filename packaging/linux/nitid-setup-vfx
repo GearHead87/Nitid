@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# nitid-setup-vfx: download and install NVIDIA's VFX runtime, which Nitid's AI upscaling and frame generation
+# use. Nitid can't include it (NVIDIA's proprietary license), so this script fetches NVIDIA's own package
+# (the nvidia-vfx Python wheel from pypi.nvidia.com), checks its SHA-256, and unpacks only the libraries.
+#
+#   nitid-setup-vfx                 install for this user  (~/.local/share/nitid/vfx, about 600 MB)
+#   nitid-setup-vfx --dir DIR       install into DIR/nitid/vfx instead (e.g. --dir /usr/lib for all users)
+#   nitid-setup-vfx --uninstall     remove it again
+#   nitid-setup-vfx --yes           accept NVIDIA's license without asking
+#
+# Nitid finds the runtime there automatically (or set NITID_VFX_DIR to a folder holding libVideoFX.so).
+set -euo pipefail
+
+VFX_VERSION=0.2.0.0
+WHEEL=nvidia_vfx-${VFX_VERSION}-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+URL=https://pypi.nvidia.com/nvidia-vfx/${WHEEL}
+SHA256=0252866a7b798a6f92c8543443d88f716e8c5bbc6a7ddd77a2754728dada9fa8
+LICENSE_URL=https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/
+
+root="${XDG_DATA_HOME:-$HOME/.local/share}"
+uninstall=0 yes=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dir) root="$2"; shift 2 ;;
+    --uninstall) uninstall=1; shift ;;
+    -y|--yes) yes=1; shift ;;
+    -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "unknown option: $1 (see --help)" >&2; exit 2 ;;
+  esac
+done
+dest="$root/nitid/vfx"
+
+if [ "$uninstall" = 1 ]; then
+  rm -rf "$dest"
+  echo "removed $dest"
+  exit 0
+fi
+
+if [ -f "$dest/nvvfx/libs/libVideoFX.so" ] && [ "$(cat "$dest/VERSION" 2>/dev/null)" = "$VFX_VERSION" ]; then
+  echo "NVIDIA VFX runtime $VFX_VERSION is already installed in $dest"
+  exit 0
+fi
+
+for tool in curl sha256sum; do
+  command -v "$tool" >/dev/null || { echo "nitid-setup-vfx needs '$tool'" >&2; exit 1; }
+done
+if command -v unzip >/dev/null; then extract() { unzip -q "$1" 'nvvfx/libs/*' 'nvidia_vfx.libs/*' -d "$2"; }
+elif command -v bsdtar >/dev/null; then extract() { bsdtar -xf "$1" -C "$2" 'nvvfx/libs' 'nvidia_vfx.libs'; }
+elif command -v python3 >/dev/null; then extract() { python3 -I -c '
+import sys, zipfile
+z = zipfile.ZipFile(sys.argv[1])
+z.extractall(sys.argv[2], [n for n in z.namelist() if n.startswith(("nvvfx/libs/", "nvidia_vfx.libs/"))])
+' "$1" "$2"; }
+else echo "nitid-setup-vfx needs 'unzip', 'bsdtar' or 'python3' to unpack the package" >&2; exit 1
+fi
+
+cat <<EOF
+Nitid's AI effects use the NVIDIA VFX runtime $VFX_VERSION (about 450 MB download, 600 MB installed).
+It is NVIDIA software under NVIDIA's license, not part of Nitid:
+  $LICENSE_URL
+It will be downloaded from $URL
+and installed into $dest
+EOF
+if [ "$yes" != 1 ]; then
+  read -r -p "Accept NVIDIA's license and install? [y/N] " answer
+  case "$answer" in y|Y|yes|YES) ;; *) echo "cancelled"; exit 1 ;; esac
+fi
+
+mkdir -p "$root/nitid"
+tmp=$(mktemp -d "$root/nitid/.vfx-download.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+
+curl -fL --retry 3 --progress-bar -o "$tmp/$WHEEL" "$URL"
+echo "$SHA256  $tmp/$WHEEL" | sha256sum -c --quiet - || { echo "download is corrupt (SHA-256 mismatch)" >&2; exit 1; }
+
+mkdir "$tmp/unpacked"
+extract "$tmp/$WHEEL" "$tmp/unpacked"
+[ -f "$tmp/unpacked/nvvfx/libs/libVideoFX.so" ] || { echo "unexpected package contents" >&2; exit 1; }
+echo "$VFX_VERSION" > "$tmp/unpacked/VERSION"
+
+rm -rf "$dest"
+mv "$tmp/unpacked" "$dest"
+echo "installed NVIDIA VFX runtime $VFX_VERSION into $dest"
+echo "check with: nitid-cli info"

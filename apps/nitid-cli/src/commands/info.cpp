@@ -22,6 +22,8 @@ Runner add_info_command(CLI::App& app)
         std::println("VFX runtime     {}", c.vfx_version.empty() ? "not found: " + c.vfx_error : c.vfx_version);
         std::println("AI upscaling    {}", c.super_res ? "yes (VFX Video Super Resolution)" : "no");
         std::println("Frame gen       {}", c.frame_gen ? "yes (VFX Video Frame Generation)" : "no");
+        if (c.vfx_version.empty())
+            std::println("                AI effects need NVIDIA's VFX runtime: run nitid-setup-vfx once");
         if (!file->empty()) {
             auto s = engine->open_file(*file);
             std::println("File            {}", s.name);

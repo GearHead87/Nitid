@@ -6,6 +6,7 @@
 #include "app.hpp"
 
 #include <CLI/CLI.hpp>
+#include <nitid/version.hpp>
 
 #include <algorithm>
 #include <print>
@@ -18,6 +19,7 @@ int main(int argc, char** argv)
     int multiplier = 0;
 
     CLI::App cli{"Nitid: AI upscaling and frame generation for video (NVIDIA RTX, Linux)", "nitid"};
+    cli.set_version_flag("--version", std::string(nitid::version()));
     cli.add_option("file", o.file, "Video file to play")->required()->check(CLI::ExistingFile);
     cli.add_option("--upscale", upscale, "AI upscaling: off, low, medium, high, ultra")
         ->check(CLI::IsMember({"off", "low", "medium", "high", "ultra"}))

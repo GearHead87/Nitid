@@ -8,7 +8,9 @@
 - NVIDIA VFX SDK:
   - C headers: `scripts/fetch-sdks.sh` (into `third_party/Maxine-VFX-SDK/nvvfx/include`)
   - runtime: `tools/spikes/vfx-env/setup.sh` (NVIDIA's `nvidia-vfx` wheel; the libraries in
-    `third_party/vfx-venv/.../nvvfx/libs`). libnitid searches `$NITID_VFX_DIR`, then that folder.
+    `third_party/vfx-venv/.../nvvfx/libs`), or `packaging/linux/nitid-setup-vfx` (NVIDIA's wheel, unpacked
+    into `~/.local/share/nitid/vfx`). libnitid searches `$NITID_VFX_DIR`, then
+    `$XDG_DATA_HOME/nitid/vfx/nvvfx/libs`, `<libnitid dir>/nitid/vfx/nvvfx/libs`, then the venv folder.
     Without it Nitid still plays video, with AI effects reported as unavailable.
 
 ## Build
@@ -40,9 +42,15 @@ S print stats, R reset stats, F1 help, Esc/Q quit.
 
 Environment: `NITID_LOG=debug` (more log, e.g. each scene cut), `NITID_VFX_DIR=/path/to/vfx/libs`.
 
+## Release builds
+
+`packaging/linux/docker-build.sh` builds the release tarball (bundled FFmpeg/SDL3) in Docker, like GitHub
+Actions does. See [releasing.md](releasing.md).
+
 ## Tests
 
 - Unit tests: `ctest --test-dir build`
 - 0.1 feature tests (open windows, need test media from `scripts/fetch-media.sh`):
   [tests/v0.1/README.md](../tests/v0.1/README.md)
+- Release tarball on a GPU machine: [tests/release/README.md](../tests/release/README.md)
 - Phase 0 feasibility spikes: [tools/spikes/README.md](../tools/spikes/README.md)

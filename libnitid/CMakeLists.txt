@@ -33,12 +33,13 @@ pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavut
 set(NITID_VFX_INCLUDE_DIR "${NITID_REPO_ROOT}/third_party/Maxine-VFX-SDK/nvvfx/include"
     CACHE PATH "NVIDIA VFX SDK C headers (nvVideoEffects.h); scripts/fetch-sdks.sh downloads them")
 set(NITID_VFX_RUNTIME_DIR "${NITID_REPO_ROOT}/third_party/vfx-venv/lib/python3.12/site-packages/nvvfx/libs"
-    CACHE PATH "Default folder searched for the VFX runtime (libVideoFX.so); $NITID_VFX_DIR overrides it")
+    CACHE PATH "Developer builds: extra folder searched last for the VFX runtime (libVideoFX.so). Release builds
+    set it empty; users install the runtime with nitid-setup-vfx")
 if(NOT EXISTS "${NITID_VFX_INCLUDE_DIR}/nvVideoEffects.h")
   message(FATAL_ERROR "VFX SDK headers not found in ${NITID_VFX_INCLUDE_DIR}. Run scripts/fetch-sdks.sh "
                       "or set -DNITID_VFX_INCLUDE_DIR=...")
 endif()
-if(NOT EXISTS "${NITID_VFX_RUNTIME_DIR}/libVideoFX.so")
+if(NITID_VFX_RUNTIME_DIR AND NOT EXISTS "${NITID_VFX_RUNTIME_DIR}/libVideoFX.so")
   message(WARNING "VFX runtime not found in ${NITID_VFX_RUNTIME_DIR} (tools/spikes/vfx-env/setup.sh "
                   "installs it). Nitid will build, but needs NITID_VFX_DIR at run time for AI effects.")
 endif()
@@ -101,6 +102,7 @@ set_target_properties(libnitid PROPERTIES
   EXPORT_NAME nitid                 # -> imported target nitid::nitid
   VERSION ${PROJECT_VERSION}
   SOVERSION ${PROJECT_VERSION_MAJOR}
+  INSTALL_RPATH "$ORIGIN"           # finds libraries bundled next to it (release tarball: FFmpeg)
   CXX_VISIBILITY_PRESET hidden      # only NITID_EXPORT symbols are public
   VISIBILITY_INLINES_HIDDEN ON
 )

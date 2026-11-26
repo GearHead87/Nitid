@@ -32,7 +32,8 @@ struct Api {
     void check(NvCV_Status s, const char* what) const;
 };
 
-// Finds and loads the runtime. Search order: explicit_dir, $NITID_VFX_DIR, the build-time default.
+// Finds and loads the runtime. Search order: explicit_dir, $NITID_VFX_DIR, then nitid-setup-vfx installs
+// ($XDG_DATA_HOME/nitid/vfx/nvvfx/libs, <libnitid dir>/nitid/vfx/nvvfx/libs), the build-time default (developers).
 // Returns nullptr and sets *error if no usable runtime was found.
 std::shared_ptr<const Api> load_api(const std::string& explicit_dir, std::string* error);
 
