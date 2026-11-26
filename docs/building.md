@@ -43,7 +43,7 @@ build/apps/nitid-cli/nitid-cli bench video.mp4 --size 2560x1440 --frame-gen medi
 Player: move the mouse for the control bar (seek bar, volume, Settings / Stats panels). Keys: Space pause,
 Left/Right ±5 s, PgDn/PgUp ±60 s, Home start, Up/Down volume, M mute, `,`/`.` A/V offset, V upscaler
 (VSR / FSR 1 / NIS / off), B VSR quality, G frame gen on/off, H frame gen quality, 0/2/3/4 frames per source
-frame (0 = per refresh), C scene cuts, P settings, I stats, O open, Tab hide controls, F/F11 or double-click
+frame (0 = per refresh), C scene cuts, X compare original | Nitid, P settings, I stats, O open, Tab hide controls, F/F11 or double-click
 fullscreen, F1 keys, Esc/Q quit.
 
 Environment: `NITID_LOG=debug` (more log, e.g. each scene cut), `NITID_VFX_DIR=/path/to/vfx/libs`.

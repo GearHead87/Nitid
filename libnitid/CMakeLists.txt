@@ -7,7 +7,7 @@
 
 cmake_minimum_required(VERSION 3.25)
 
-project(libnitid VERSION 0.2.0 LANGUAGES CXX)
+project(libnitid VERSION 0.3.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 include(GenerateExportHeader)

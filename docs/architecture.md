@@ -1,4 +1,4 @@
-# Nitid architecture (0.2)
+# Nitid architecture (0.3)
 
 How the code is organised, how a frame moves through it, and where each planned feature plugs in.
 For the overall plan see [PLAN.md](../PLAN.md); for build steps see [building.md](building.md).
@@ -44,10 +44,12 @@ platform/             PipeWire client library loaded at run time (sound now, scr
 input/                FrameSource interface (next, recycle, seek); FfmpegFileSource (decoder thread, NVDEC + GPU
                       colour conversion, CPU fallback, frame-exact seek); SceneCutDetector
 vfx/                  VFX runtime loader (dlopen), SuperRes (VSR), FrameGen (VFG, Timestep mode)
-pipeline/             Pipeline (upload -> VSR / FSR / NIS -> two-frame ring -> frame gen), frame_layout (size maths),
+pipeline/             Pipeline (upload -> VSR / FSR / NIS or VFX clean-up -> two-frame ring -> frame gen; keeps the
+                      original next to each frame in compare mode), RenderAhead (window output: the pipeline on its
+                      own thread, frames prepared ahead of the display, frame-gen pacing), frame_layout (size maths),
                       frame_clock (display clock, frame/phase selection)
-output/               SwapchainPresenter (FIFO, two presents queued, present-wait stats and display latency,
-                      app overlay via dynamic rendering, capture hook)
+output/               SwapchainPresenter (own high-priority CUDA stream, FIFO, two presents queued, present-wait
+                      stats and display latency, compare split blit, app overlay via dynamic rendering, capture hook)
 third_party/          NIS_Config.h (MIT), license texts of FSR 1 / NIS
 tests/ (libnitid/tests) unit tests for the pure logic (ctest)
 ```
@@ -55,19 +57,16 @@ tests/ (libnitid/tests) unit tests for the pure logic (ctest)
 ## Frame flow
 
 ```
-decoder thread                          render thread (app's loop)                         display
-──────────────                          ──────────────────────────                         ───────
-FFmpeg/NVDEC ─► NV12 (CUDA, our ctx) ─► [queue of 4] ─► Pipeline::produce(position)
-   kernel: NV12 → RGBA8 (GPU buffer)        │  copy into ring / VSR input (device copy)
-   kernel: luma thumbnail → CPU             │  VSR (once per source frame) → ring[next]
-   SceneCutDetector                         │  frame gen(ring[cur], ring[next], phase) if between frames
-                                            ▼
-                                     AudioPlayer::sync(media time, when it will be on screen)
-                                     SwapchainPresenter::present
-                                        CUDA copy → shared buffer → signal semaphore
-                                        Vulkan: wait → copy to image → blit (fit) → app overlay (ImGui)
-                                                → present (FIFO)
-                                        wait until the present from 2 refreshes ago is on screen ─► 165 Hz
+decoder thread                     render-ahead worker                      render thread (app's loop)       display
+──────────────                     ───────────────────                      ──────────────────────────       ───────
+FFmpeg/NVDEC ─► NV12 (CUDA) ─►     Pipeline::produce(next grid position)    DisplayClock.tick (one refresh)
+  kernel: NV12 → RGBA8             │ upload (+ original in compare mode)     RenderAhead::take(position):
+  thumbnail → SceneCutDetector     │ VSR / FSR / NIS / clean-up              newest frame reached
+  [queue of 4] ──────────────────► │ ring (cur, next) → frame gen            AudioPlayer::sync(clock time)
+                                   ▼                                         SwapchainPresenter::present
+                                   copy into pool (6 buffers), queue (4) ──►  CUDA copy (own stream) → Vulkan:
+                                   grid: refresh × stride | 1/m | 1 frame      blit (or original | Nitid split)
+                                   stride from frame cost (≤ 95 % rule)        → overlay (ImGui) → FIFO ─────► 165 Hz
 ```
 
 - **Position** (in source frames) comes from `DisplayClock`: whole refreshes, follows the wall clock,
@@ -75,7 +74,10 @@ FFmpeg/NVDEC ─► NV12 (CUDA, our ctx) ─► [queue of 4] ─► Pipeline::pr
   (rounded to k/multiplier, or exact for "per refresh").
 - **Frames that fall behind** are skipped *before* upload/VSR (no GPU time spent on frames never shown).
 - **Scene cuts**: a cut between `cur` and `next` makes frame gen hold `cur` instead of morphing.
-- **Headless** (`render_headless`): position = n / multiplier, output copied to the caller's buffer.
+- **Render-ahead** (window output): the worker owns the pipeline between `start` and `stop` (seek, close);
+  settings changes are applied by the worker (models load without freezing the window). When frame generation
+  costs more than 95 % of a refresh it prepares one frame every `stride` refreshes (tests/v0.3/01).
+- **Headless** (`render_headless`): position = n / multiplier, output copied to the caller's buffer; no worker.
 - **Sound follows the picture**: the picture is locked to the display; each frame tells the AudioPlayer when it
   will be on screen (measured present-to-screen time), the PipeWire callback knows when its buffer will be
   heard, and the player resamples by ≤ 1 % or resyncs on jumps (tests/v0.2/03).
@@ -98,6 +100,9 @@ FFmpeg/NVDEC ─► NV12 (CUDA, our ctx) ─► [queue of 4] ─► Pipeline::pr
 8. **Start clocks when the first frame is ready**, not when a seek is asked for (tests/v0.2/03).
 9. **Run-time loaded libraries** (VFX, PipeWire) are only used through function tables; libnitid links with
    `--no-undefined` to catch slips.
+10. **The presenter never waits on the pipeline's stream**: it has its own (highest-priority) CUDA stream; the
+    pipeline's stream is lowest priority (tests/v0.3/01).
+11. **Ignore warm-up frames when measuring cost** (decoder start, first model runs: 30–50 ms) (tests/v0.3/01).
 
 ## Where planned features go
 
@@ -112,7 +117,8 @@ FFmpeg/NVDEC ─► NV12 (CUDA, our ctx) ─► [queue of 4] ─► Pipeline::pr
 | Capture card (3) | `input/v4l2_source.*` implementing `FrameSource` | skipped for now (no card) |
 | Low-latency live mode (3) | `pipeline/` option: no lookahead frame, frame gen off or extrapolation | live inputs can't wait for `next` |
 | DLSS SR / DLSS-G lite + optical flow (4) | `ngx/` + `motion/` modules; new `Upscaler` / `FrameGen` enum values | spikes S2, S3, S4, F1 |
-| VSR / frame gen off the render thread | `pipeline/` worker + queue of generated frames | needed for frame gen HIGH at 165 Hz (tests/v0.1/03) |
+| VSR / frame gen off the render thread | ✅ 0.3: `pipeline/render_ahead.*` | frame gen HIGH smooth at 165 Hz (stride 2) |
+| Side-by-side comparison (2) | ✅ 0.3: pipeline keeps originals, presenter split blit | UI draws the line |
 | NVENC recording / export (5) | `output/nvenc_recorder.*`; `nitid-cli export` command | `nitid-cli`'s ffmpeg-pipe writer is a stopgap |
 | Virtual camera (5) | `output/v4l2loopback_sink.*`; `nitid-cli virtual-camera` | spike M5 pending |
 | More CLI commands | `apps/nitid-cli/src/commands/<name>.cpp` + register in `commands.hpp` | one file per subcommand |

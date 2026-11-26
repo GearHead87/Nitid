@@ -62,6 +62,9 @@ done
 echo "== sintel_trailer-1080p.mp4 --start 30 --upscale fsr (seek + FSR 1)"
 timeout 40 "$app/bin/nitid" "$media/sintel_trailer-1080p.mp4" --start 30 --upscale fsr --quit-after 5 --volume 0.2 2>&1 \
   | grep -E 'seek to|^(Sound|Display|Upscale):' || true
+echo "== sintel_trailer-1080p.mp4 --frame-gen high --compare (render-ahead pacing, compare view)"
+timeout 40 "$app/bin/nitid" "$media/sintel_trailer-1080p.mp4" --frame-gen high --compare --quit-after 8 --volume 0.2 2>&1 \
+  | grep -E "can't keep up|^(FrameGen|Display):" || true
 echo "== no file (open screen), 3 s"
 timeout 40 "$app/bin/nitid" --quit-after 3 >/dev/null 2>&1 && echo "ran, exit 0"
 echo '```'

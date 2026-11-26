@@ -21,7 +21,7 @@ Start
 
 In the player, move the mouse for the controls (seek bar, volume, Settings and Stats panels); F1 lists the keys.
 Space pause, Left/Right seek, Up/Down volume, M mute, V upscaler (VSR / FSR 1 / NIS / off), G frame gen,
-P settings, I stats, Tab hide controls, F or double-click fullscreen, Esc quit.
+X compare original | Nitid, P settings, I stats, Tab hide controls, F or double-click fullscreen, Esc quit.
 All options: ./bin/nitid --help   and   ./bin/nitid-cli --help
 
 Files

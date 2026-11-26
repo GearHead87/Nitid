@@ -8,6 +8,11 @@ release workflow puts that section at the top of the GitHub release, followed by
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-26
+
+Smooth frame generation at every quality, a side-by-side compare view, and optional clean-up. Test results:
+[tests/v0.3](https://github.com/GearHead87/Nitid/blob/main/tests/v0.3/README.md).
+
 ### Added
 - **Render-ahead:** upscaling and frame generation run on their own thread, preparing frames for the coming
   refreshes. Frame generation HIGH is now smooth at 165 Hz: when a frame takes longer than a refresh, Nitid makes
@@ -19,6 +24,16 @@ release workflow puts that section at the top of the GitHub release, followed by
   (higher VMAF, lower PSNR).
 - **Compare view** (`X`, Settings → View, `--compare`): the original on the left, Nitid on the right; drag on the
   picture to move the line.
+
+### Changed
+- Engine API: `Settings::compare`, `Settings::cleanup` / `cleanup_strength`, `Engine::set_compare_split`,
+  `parse_cleanup`; `Stats` gained `late_frames`, `frame_gen_stride`, `cleanup_active`, the picture rectangle.
+- The window's CUDA copies run on their own high-priority stream; the AI pipeline's stream is low priority.
+
+### Known limits
+- Frame generation HIGH still misses some refreshes now and then (0–50 in 12 s at 165 Hz) when a ~10 ms
+  generation burst holds the GPU at the wrong moment; MEDIUM is clean.
+- No HDR output and no screen capture yet.
 
 ## [0.2.0] - 2026-11-26
 
@@ -90,6 +105,7 @@ display, on Linux. Test results: [tests/v0.1](https://github.com/GearHead87/Niti
 - No audio, no seeking, no on-screen menu and no HDR output yet.
 - Needs an NVIDIA RTX GPU; frame generation needs RTX 40 or 50.
 
-[Unreleased]: https://github.com/GearHead87/Nitid/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/GearHead87/Nitid/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/GearHead87/Nitid/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/GearHead87/Nitid/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/GearHead87/Nitid/releases/tag/v0.1.0
