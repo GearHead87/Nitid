@@ -134,8 +134,12 @@ void VulkanContext::create_device(VkSurfaceKHR surface)
     qci.queueFamilyIndex = queue_family;
     qci.queueCount = 1;
     qci.pQueuePriorities = &prio;
+    // Dynamic rendering (Vulkan 1.3): the app's overlay (ImGui) draws onto the window image without render passes.
+    VkPhysicalDeviceVulkan13Features v13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+    v13.dynamicRendering = VK_TRUE;
+    v13.pNext = present_wait ? &pid : nullptr;
     VkDeviceCreateInfo ci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
-    ci.pNext = present_wait ? &pid : nullptr;
+    ci.pNext = &v13;
     ci.queueCreateInfoCount = 1;
     ci.pQueueCreateInfos = &qci;
     ci.enabledExtensionCount = uint32_t(exts.size());

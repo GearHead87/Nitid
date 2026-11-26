@@ -81,8 +81,11 @@ public:
     void resize_window(std::uint32_t width, std::uint32_t height);
     void set_refresh_rate(double hz);
     // Renders and presents one display refresh. Blocks until the display can take a new frame.
-    // Returns false when the source has ended (and is not looping).
+    // Returns false when the source has ended (and is not looping); the last frame stays on screen.
     bool render_frame();
+    // Overlay: the app draws on top of the video (on-screen controls). nullptr = none.
+    void set_overlay(OverlayCallback overlay);
+    VulkanDevice vulkan_device() const;
     // Test hook: saves the next window image (exactly what is presented) as a PPM file.
     void capture_next_window_frame(const std::string& ppm_path);
 

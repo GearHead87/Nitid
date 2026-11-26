@@ -7,6 +7,7 @@ The Linux release tarball includes, or is built with, the following software. Th
 |---|---|---|---|
 | [FFmpeg](https://ffmpeg.org) (libavformat, libavcodec, libavutil, libswscale, libswresample) | 9.1 | LGPL 2.1 or later | Bundled as unmodified shared libraries in `lib/`, built with `--disable-gpl --disable-nonfree` |
 | [SDL](https://libsdl.org) | 3.4.20 | zlib | Bundled as a shared library in `lib/` |
+| [Dear ImGui](https://github.com/ocornut/imgui) | 1.93.0 | MIT | Compiled into `nitid` (on-screen controls) |
 | [CLI11](https://github.com/CLIUtils/CLI11) | 2.7.2 | BSD 3-Clause | Header-only, compiled into the programs |
 | [nv-codec-headers](https://github.com/FFmpeg/nv-codec-headers) | 12.2.72.0 | MIT | Headers compiled into FFmpeg (loads NVIDIA's decoder from the driver) |
 | [AMD FidelityFX FSR 1](https://github.com/GPUOpen-Effects/FidelityFX-FSR) | 1.0 (2021-06-29) | MIT | EASU and RCAS shader code ported to CUDA, compiled into libnitid |

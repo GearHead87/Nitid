@@ -33,7 +33,11 @@ constexpr std::array kBindings = {
     KeyBinding{SDLK_C, Action::ToggleSceneCuts, "C", "scene-cut detection on / off"},
     KeyBinding{SDLK_R, Action::ResetStats, "R", "reset stats"},
     KeyBinding{SDLK_S, Action::PrintStats, "S", "print stats to the terminal"},
-    KeyBinding{SDLK_F1, Action::ShowHelp, "F1", "print this help"},
+    KeyBinding{SDLK_O, Action::OpenFile, "O", "open a file"},
+    KeyBinding{SDLK_P, Action::ToggleSettingsPanel, "P", "settings panel"},
+    KeyBinding{SDLK_I, Action::ToggleStatsPanel, "I", "stats panel"},
+    KeyBinding{SDLK_TAB, Action::ToggleUi, "Tab", "hide / show all on-screen controls"},
+    KeyBinding{SDLK_F1, Action::ShowHelp, "F1", "this list of keys"},
 };
 
 } // namespace

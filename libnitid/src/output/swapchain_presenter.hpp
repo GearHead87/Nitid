@@ -6,6 +6,8 @@
 #include "gpu/interop.hpp"
 #include "pipeline/frame_layout.hpp"
 
+#include <nitid/window.hpp>
+
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -27,6 +29,10 @@ public:
     // Presents one frame. `frame` is an RGBA8 GPU buffer of `size` (or 0 for a black frame).
     // Blocks until the display can take another frame. Returns the time in ms spent on the output copy.
     double present(CUdeviceptr frame, pipeline::Size size);
+
+    void set_overlay(OverlayCallback cb) { overlay_ = std::move(cb); }
+    VkFormat format() const { return format_; }
+    uint32_t image_count() const { return uint32_t(images_.size()); }
 
     // Test hook: saves the next presented window image (exactly what goes to the screen) as a PPM file.
     void capture_next(const std::string& ppm_path) { capture_path_ = ppm_path; }
@@ -76,7 +82,10 @@ private:
     VkFormat format_ = VK_FORMAT_B8G8R8A8_UNORM;
     VkExtent2D extent_{};
     std::vector<VkImage> images_;
+    std::vector<VkImageView> views_;     // for the overlay (dynamic rendering)
     std::vector<VkSemaphore> rendered_;  // one per swapchain image
+    OverlayCallback overlay_;
+    bool can_overlay_ = false;           // swapchain images allow COLOR_ATTACHMENT
     std::array<Slot, kFrames> slots_;
     uint64_t frame_ = 0;
     uint64_t present_id_ = 0;

@@ -44,6 +44,8 @@ public:
     std::optional<Output> produce(double position, int multiplier);
 
     Size work_size() const { return work_; }
+    // Changes whenever the frame buffers are reallocated (an Output from before is then invalid).
+    uint64_t generation() const { return generation_; }
     void fill_stats(Stats& s) const;
     void reset_stats();
 
@@ -79,6 +81,7 @@ private:
     gpu::CudaBuffer upload_;  // source-size frame (VSR input)
     Slot slots_[2];
     int cur_ = 0, next_ = 1;
+    uint64_t generation_ = 0;
     bool ended_ = false;
     bool pending_cut_ = false;  // cut seen on a skipped frame, carried to the next uploaded one
 

@@ -17,6 +17,16 @@ release workflow puts that section at the top of the GitHub release, followed by
 - **Sound** through PipeWire, in sync with the picture: the picture stays locked to the display and the sound
   follows it (resampled by at most 1 %, resync after seeks / pauses). Up / Down volume, M mute, `,` / `.` move
   the sound by 10 ms; `--volume`, `--audio-delay`, `--no-audio`. Works with Bluetooth latency (235 ms tested).
+- **On-screen controls** (Dear ImGui): control bar with seek bar and volume (hides while playing), settings
+  panel (P) for upscaling / frame generation / A/V offset, stats panel (I), key list (F1), Tab hides all.
+  Double-click for fullscreen.
+- **Open files from the window**: `nitid` without a file shows an open screen (file dialog, or drop a file).
+
+### Changed
+- At the end of a video the player stays on the last frame (Replay) instead of quitting; `--exit-at-end` quits.
+- `V` cycles the upscaler (VSR / FSR 1 / NIS / off) instead of switching VSR on and off.
+- Engine API: `seek`, `position`, sound controls, `set_overlay` / `vulkan_device` for app overlays; the Vulkan
+  device enables dynamic rendering.
 
 ## [0.1.0] - 2026-11-26
 

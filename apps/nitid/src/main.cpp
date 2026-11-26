@@ -2,7 +2,7 @@
 //
 //   nitid [options] <video file>
 //
-// Plays the file with NVIDIA VFX AI upscaling and frame generation. Keys are printed at start (F1).
+// Plays the file with AI upscaling and frame generation, with on-screen controls (F1 lists the keys).
 #include "app.hpp"
 
 #include <CLI/CLI.hpp>
@@ -21,7 +21,7 @@ int main(int argc, char** argv)
 
     CLI::App cli{"Nitid: AI upscaling and frame generation for video (NVIDIA RTX, Linux)", "nitid"};
     cli.set_version_flag("--version", std::string(nitid::version()));
-    cli.add_option("file", o.file, "Video file to play")->required()->check(CLI::ExistingFile);
+    cli.add_option("file", o.file, "Video file to play (or open one from the window)")->check(CLI::ExistingFile);
     cli.add_option("--upscale", upscale, "Upscaling: VSR (AI) quality low, medium, high, ultra; fsr; nis; off")
         ->check(CLI::IsMember({"off", "low", "medium", "high", "ultra", "fsr", "nis"}))
         ->capture_default_str();
@@ -43,6 +43,12 @@ int main(int argc, char** argv)
     cli.add_option("--volume", o.volume, "Volume, 0 to 2 (1 = as recorded)")->check(CLI::Range(0.0, 2.0))->capture_default_str();
     cli.add_option("--audio-delay", o.audio_delay_ms, "Move the sound against the picture, in ms (+ = later)");
     cli.add_flag("--loop", o.open.loop, "Play again from the start at the end");
+    cli.add_flag("--exit-at-end", o.exit_at_end, "Quit when the video ends (default: stay on the last frame)");
+    std::string ui = "auto";
+    cli.add_option("--ui", ui, "On-screen controls: on, off, auto (off when --capture-at is used)")
+        ->check(CLI::IsMember({"on", "off", "auto"}));
+    cli.add_option("--test-panel", o.test_panels, "Tests: open panels at start (settings, stats, help)")
+        ->check(CLI::IsMember({"settings", "stats", "help"}));
     cli.add_flag("!--sw-decode", o.open.hw_decode, "Decode in software instead of NVDEC");
     cli.add_option("--source-step", o.open.source_step,
                    "Use only every Nth frame of the file (tests: frame gen rebuilds the dropped ones)")
@@ -61,6 +67,7 @@ int main(int argc, char** argv)
     cli.add_option("--capture-prefix", o.capture_prefix, "File name prefix for --capture-at images");
     CLI11_PARSE(cli, argc, argv);
 
+    o.ui = ui == "on" ? 1 : ui == "off" ? 0 : -1;
     parse_upscaling(upscale, o.settings);  // names already checked by CLI11
     parse_frame_gen(frame_gen, o.settings);
     o.settings.frame_gen_multiplier = multiplier;

@@ -46,6 +46,7 @@ struct Engine::Impl {
     double refresh_hz = 60;
     pipeline::DisplayClock clock;
     std::optional<pipeline::Output> last_output;
+    uint64_t last_output_gen = 0;  // pipeline generation last_output belongs to
     double last_position = -1;
     std::optional<std::chrono::steady_clock::time_point> seek_started;  // logs how long a seek took
 
@@ -332,6 +333,7 @@ bool Engine::render_frame()
     double position = t * fps;
     int mult = m.effective_multiplier(true);
 
+    if (m.last_output && m.pipe->generation() != m.last_output_gen) m.last_output.reset();  // buffers reallocated
     std::optional<pipeline::Output> out;
     if (m.paused && m.last_output && position == m.last_position) {
         out = m.last_output;  // nothing moves while paused: don't regenerate
@@ -343,8 +345,14 @@ bool Engine::render_frame()
             out = m.pipe->produce(0, mult);
         }
     }
-    if (!out) return false;
+    if (!out) {
+        // End of the source: keep showing the last frame (and the app's overlay) until it seeks or closes.
+        if (m.last_output) m.presenter->present(m.last_output->ptr, m.last_output->size);
+        else m.presenter->present(0, {});
+        return false;
+    }
     m.last_output = out;
+    m.last_output_gen = m.pipe->generation();
     m.last_position = position;
     m.position_s = position / fps;
     if (m.seek_started) {
@@ -362,6 +370,28 @@ bool Engine::render_frame()
     m.output_ms.add(m.presenter->present(out->ptr, out->size));
     m.count_output();
     return true;
+}
+
+void Engine::set_overlay(OverlayCallback overlay)
+{
+    if (impl_->presenter) impl_->presenter->set_overlay(std::move(overlay));
+}
+
+VulkanDevice Engine::vulkan_device() const
+{
+    const Impl& m = *impl_;
+    VulkanDevice d;
+    d.api_version = VK_API_VERSION_1_3;
+    d.instance = m.vk->instance;
+    d.physical_device = m.vk->phys;
+    d.device = m.vk->device;
+    d.queue_family = m.vk->queue_family;
+    d.queue = m.vk->queue;
+    if (m.presenter) {
+        d.window_format = m.presenter->format();
+        d.window_image_count = m.presenter->image_count();
+    }
+    return d;
 }
 
 void Engine::capture_next_window_frame(const std::string& ppm_path)

@@ -36,6 +36,10 @@ enum class Action {
     ResetStats,
     PrintStats,
     ShowHelp,
+    ToggleUi,
+    ToggleStatsPanel,
+    ToggleSettingsPanel,
+    OpenFile,
 };
 
 struct KeyBinding {

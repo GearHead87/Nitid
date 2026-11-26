@@ -98,7 +98,9 @@ void SwapchainPresenter::create_swapchain()
     ci.imageExtent = extent_;
     ci.imageArrayLayers = 1;
     can_capture_ = caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-    ci.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | (can_capture_ ? VK_IMAGE_USAGE_TRANSFER_SRC_BIT : 0);
+    can_overlay_ = caps.supportedUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    ci.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | (can_capture_ ? VK_IMAGE_USAGE_TRANSFER_SRC_BIT : 0) |
+                    (can_overlay_ ? VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT : 0);
     ci.preTransform = caps.currentTransform;
     ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     ci.presentMode = VK_PRESENT_MODE_FIFO_KHR;  // steady pacing (spike S7)
@@ -111,6 +113,17 @@ void SwapchainPresenter::create_swapchain()
     vkGetSwapchainImagesKHR(vk_.device, swapchain_, &n, nullptr);
     images_.resize(n);
     vkGetSwapchainImagesKHR(vk_.device, swapchain_, &n, images_.data());
+    if (can_overlay_) {
+        views_.resize(n);
+        for (uint32_t i = 0; i < n; ++i) {
+            VkImageViewCreateInfo vci{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+            vci.image = images_[i];
+            vci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            vci.format = format_;
+            vci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+            NITID_VK(vkCreateImageView(vk_.device, &vci, nullptr, &views_[i]));
+        }
+    }
     VkSemaphoreCreateInfo sci{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
     rendered_.resize(n);
     for (auto& s : rendered_) NITID_VK(vkCreateSemaphore(vk_.device, &sci, nullptr, &s));
@@ -124,6 +137,8 @@ void SwapchainPresenter::destroy_swapchain()
 {
     for (auto s : rendered_) vkDestroySemaphore(vk_.device, s, nullptr);
     rendered_.clear();
+    for (auto v : views_) vkDestroyImageView(vk_.device, v, nullptr);
+    views_.clear();
     images_.clear();
     if (swapchain_) vkDestroySwapchainKHR(vk_.device, swapchain_, nullptr);
     swapchain_ = VK_NULL_HANDLE;
@@ -261,10 +276,34 @@ double SwapchainPresenter::present(CUdeviceptr frame, pipeline::Size size)
         vkCmdBlitImage(cb, s.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
                        &blit, filter);
     }
+    VkImageLayout last = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    VkAccessFlags last_access = VK_ACCESS_TRANSFER_WRITE_BIT;
+    VkPipelineStageFlags last_stage = T;
+    // The app's overlay, drawn on top of the video with dynamic rendering.
+    if (overlay_ && can_overlay_) {
+        const auto C = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        barrier(cb, target, last, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT,
+                VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, T, C);
+        VkRenderingAttachmentInfo att{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
+        att.imageView = views_[idx];
+        att.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        att.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        VkRenderingInfo ri{VK_STRUCTURE_TYPE_RENDERING_INFO};
+        ri.renderArea = {{0, 0}, extent_};
+        ri.layerCount = 1;
+        ri.colorAttachmentCount = 1;
+        ri.pColorAttachments = &att;
+        vkCmdBeginRendering(cb, &ri);
+        overlay_(OverlayFrame{cb, extent_.width, extent_.height});
+        vkCmdEndRendering(cb);
+        last = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        last_access = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        last_stage = C;
+    }
     // Test hook: copy the finished window image to a host buffer.
     VkBuffer cap_buf = VK_NULL_HANDLE;
     VkDeviceMemory cap_mem = VK_NULL_HANDLE;
-    VkImageLayout last = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     if (!capture_path_.empty() && can_capture_) {
         VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
         bci.size = VkDeviceSize(extent_.width) * extent_.height * 4;
@@ -277,20 +316,20 @@ double SwapchainPresenter::present(CUdeviceptr frame, pipeline::Size size)
         mai.memoryTypeIndex = vk_.memory_type(r.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         NITID_VK(vkAllocateMemory(vk_.device, &mai, nullptr, &cap_mem));
         NITID_VK(vkBindBufferMemory(vk_.device, cap_buf, cap_mem, 0));
-        barrier(cb, target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT,
-                VK_ACCESS_TRANSFER_READ_BIT, T, T);
+        barrier(cb, target, last, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, last_access, VK_ACCESS_TRANSFER_READ_BIT, last_stage, T);
         VkBufferImageCopy c{};
         c.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
         c.imageExtent = {extent_.width, extent_.height, 1};
         vkCmdCopyImageToBuffer(cb, target, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, cap_buf, 1, &c);
         last = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        last_access = VK_ACCESS_TRANSFER_READ_BIT;
+        last_stage = T;
     }
-    barrier(cb, target, last, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_ACCESS_TRANSFER_WRITE_BIT, 0, T,
-            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+    barrier(cb, target, last, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, last_access, 0, last_stage, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
     NITID_VK(vkEndCommandBuffer(cb));
 
     VkSemaphore waits[2] = {s.acquired, has_frame ? s.ready->vk() : VK_NULL_HANDLE};
-    VkPipelineStageFlags stages[2] = {T, T};
+    VkPipelineStageFlags stages[2] = {T | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, T};
     VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     si.waitSemaphoreCount = has_frame ? 2 : 1;
     si.pWaitSemaphores = waits;

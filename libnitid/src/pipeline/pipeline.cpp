@@ -49,6 +49,7 @@ void Pipeline::restart()
 
 void Pipeline::allocate_ring()
 {
+    ++generation_;
     size_t bytes = size_t(work_.w) * work_.h * 4;
     for (auto& s : slots_) {
         s.buf = gpu::CudaBuffer(bytes);
