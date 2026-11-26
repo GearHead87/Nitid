@@ -39,6 +39,13 @@ HIGH + compare view with render-ahead pacing (one frame every 2 refreshes, 165 f
 sound in sync (A/V −0.7 ms), seek + FSR 1, open screen. Release vs developer build: identical frames (the same
 checksums as 0.2.0: the headless pipeline did not change).
 
+## 0.4.0 (2026-11-27)
+
+[output-2026-11-27-v0.4.0.md](output-2026-11-27-v0.4.0.md): tarball 12 MB, checks pass (libdbus and PipeWire are
+loaded at run time, so still no new link dependencies). On the GPU: live input from a synthetic PipeWire source
+(60 fps in, 165 fps out, 29 ms capture → screen), video playback, frame gen HIGH pacing, compare, seek + FSR 1.
+Release vs developer build: identical frames. (Desktop screen capture is test v0.4/02; not repeated here.)
+
 ## Findings
 
 - **NVIDIA's `nvidia-vfx` wheel is only on pypi.nvidia.com.** On PyPI there is just a 3.7 KB stub source
