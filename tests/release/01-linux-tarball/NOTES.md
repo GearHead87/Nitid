@@ -46,8 +46,28 @@ loaded at run time, so still no new link dependencies). On the GPU: live input f
 (60 fps in, 165 fps out, 29 ms capture → screen), video playback, frame gen HIGH pacing, compare, seek + FSR 1.
 Release vs developer build: identical frames. (Desktop screen capture is test v0.4/02; not repeated here.)
 
+## 0.5.0 (2026-11-28)
+
+[output-2026-11-28-v0.5.0.md](output-2026-11-28-v0.5.0.md): tarball 12 MB; the build now fetches the pinned DLSS SDK
+(headers + `libnvsdk_ngx.a`, SHA-256 checked) and ships the DLSS module `lib/libnitid-dlss.so`, `bin/nitid-setup-dlss`
+and NVIDIA's RTX SDKs license; dependency check and smoke test pass (the module needs only libvulkan / libstdc++ /
+libc). From the tarball: `nitid-setup-dlss` installs 64 MB; `nitid-cli info` reports DLSS 310.9.16 (SR, FG up to 6x)
+and optical flow; DLSS upscaling + DLSS frame generation 6x per refresh and DLSS + lite 4x in a large window both
+165 fps, 0 missed refreshes. Release vs developer build: identical frames for VSR, FSR and the new DLSS + DLSS
+frame generation 4x job (`6e633958…`).
+
+The first run ([output-2026-11-28-v0.5.0-run1.md](output-2026-11-28-v0.5.0-run1.md)) had one bad row: the large-window
+DLSS run at 29 fps with 138 missed refreshes, right after the live-input row that also had 101 missed refreshes. The
+same command repeated twice with the release build and once with the developer build ran at 165 fps; the full re-run
+above is clean. The desktop was busy, as seen before (memory: missed-refresh counts are noisy here).
+
+Found while building: Ubuntu 24.04's Vulkan headers only know the old name of the optical flow format
+(`VK_FORMAT_R16G16_S10_5_NV`, an alias of `..._SFIXED5_NV` in newer headers); fixed before the release.
+
 ## Findings
 
+- **The DLSS runtime comes from NVIDIA's GitHub SDK repository** (raw files at a pinned tag, SHA-256 checked by
+  `nitid-setup-dlss`); only NVIDIA's tiny static loader is compiled into Nitid's separate DLSS module.
 - **NVIDIA's `nvidia-vfx` wheel is only on pypi.nvidia.com.** On PyPI there is just a 3.7 KB stub source
   package. `nitid-setup-vfx` pins the wheel URL and its SHA-256.
 - **The wheel's libraries need its folder layout.** `libVideoFX.so` and the effect libraries load the CUDA

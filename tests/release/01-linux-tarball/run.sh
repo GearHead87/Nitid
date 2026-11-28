@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Release test 01: the Linux release tarball, built in Docker (Ubuntu 24.04, as in GitHub Actions), used the way
-# a user would on this machine (Arch, NVIDIA GPU): extract to a temp folder, install the VFX runtime with
-# nitid-setup-vfx, check info, play videos in the window, and compare its bench output with the developer
+# a user would on this machine (Arch, NVIDIA GPU): extract to a temp folder, install the VFX and DLSS runtimes with
+# nitid-setup-vfx / -dlss, check info, play videos in the window, and compare its bench output with the developer
 # build's (same code, bundled FFmpeg 9.1 vs the system's).
 # Everything goes to /tmp (removed at the end); the build itself stays in the nitid-release-work Docker volume.
 #   tests/release/01-linux-tarball/run.sh [--no-build]
@@ -24,7 +24,7 @@ tarball=$(ls "$root"/out/nitid-*-linux-x86_64.tar.gz | tail -1)
 tar -xzf "$tarball" -C "$tmp"
 app=$(ls -d "$tmp"/nitid-*-linux-x86_64)
 export XDG_DATA_HOME="$tmp/xdg"     # nitid-setup-vfx installs here instead of ~/.local/share
-unset LD_LIBRARY_PATH NITID_VFX_DIR
+unset LD_LIBRARY_PATH NITID_VFX_DIR NITID_DLSS_DIR NITID_DLSS_MODULE
 
 echo
 echo "### Host libraries the binaries resolve (outside lib/)"
@@ -44,6 +44,14 @@ echo '```'
 "$app/bin/nitid-setup-vfx" --yes 2>&1 | grep -v '^#\|%'
 "$app/bin/nitid-setup-vfx" --yes 2>&1 | tail -1     # second run: already installed
 du -sh "$XDG_DATA_HOME/nitid/vfx"
+echo '```'
+
+echo
+echo "### nitid-setup-dlss --yes (0.5+)"
+echo '```'
+"$app/bin/nitid-setup-dlss" --yes 2>&1 | grep -v '^#\|%\|^>>'
+"$app/bin/nitid-setup-dlss" --yes 2>&1 | tail -1     # second run: already installed
+du -sh "$XDG_DATA_HOME/nitid/dlss"
 echo '```'
 
 echo
@@ -72,15 +80,22 @@ if command -v gst-launch-1.0 >/dev/null && gst-inspect-1.0 pipewiresink >/dev/nu
   sleep 2
   timeout 30 "$app/bin/nitid" --pipewire nitid-release-test --quit-after 6 2>&1 | grep -E '^(Display|Live):' || true
 fi
+echo "== lq_540p.mp4 --upscale dlss --frame-gen dlss (DLSS upscaling + DLSS frame generation, per refresh)"
+timeout 40 "$app/bin/nitid" "$media/lq_540p.mp4" --upscale dlss --frame-gen dlss --quit-after 6 --volume 0.2 2>&1 \
+  | grep -E '^(Display|Upscale|FrameGen|Motion):' || true
+echo "== src_1080p.mp4 --upscale dlss --frame-gen dlss-lite --multiplier 4 (4K output in a 3840x2160 window)"
+timeout 40 "$app/bin/nitid" "$media/src_1080p.mp4" --upscale dlss --frame-gen dlss-lite --multiplier 4 \
+  --width 3840 --height 2160 --quit-after 6 --volume 0.2 2>&1 | grep -E '^(Display|Upscale|FrameGen|Motion):' || true
 echo "== no file (open screen), 3 s"
 timeout 40 "$app/bin/nitid" --quit-after 3 >/dev/null 2>&1 && echo "ran, exit 0"
 echo '```'
 
 echo
 echo "### Release build vs developer build: same bench output?"
-echo "540p -> 1080p, first 96 output frames, lossless: (1) VSR HIGH + frame gen MEDIUM 2x, (2) FSR 1 + seek to 4 s."
+echo "540p -> 1080p, first 96 output frames, lossless: (1) VSR HIGH + frame gen MEDIUM 2x, (2) FSR 1 + seek to 4 s,"
+echo "(3) DLSS + DLSS frame generation 4x (0.5+)."
 echo '```'
-for job in "vsr --frame-gen medium --multiplier 2" "fsr --upscale fsr --start 4"; do
+for job in "vsr --frame-gen medium --multiplier 2" "fsr --upscale fsr --start 4" "dlss --upscale dlss --frame-gen dlss --multiplier 4"; do
   read -r name args <<<"$job"
   for b in release dev; do
     cli=$([ $b = release ] && echo "$app/bin/nitid-cli" || echo "$dev_cli")
@@ -94,7 +109,8 @@ done
 echo '```'
 
 echo
-echo "### nitid-setup-vfx --uninstall"
+echo "### nitid-setup-vfx / nitid-setup-dlss --uninstall"
 echo '```'
 "$app/bin/nitid-setup-vfx" --uninstall
+"$app/bin/nitid-setup-dlss" --uninstall
 echo '```'
