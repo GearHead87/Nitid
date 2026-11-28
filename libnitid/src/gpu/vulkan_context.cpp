@@ -91,7 +91,7 @@ std::vector<std::string> VulkanContext::available_device_extensions() const
     return out;
 }
 
-void VulkanContext::create_device(VkSurfaceKHR surface)
+void VulkanContext::create_device(VkSurfaceKHR surface, const std::vector<std::string>& optional)
 {
     auto avail = available_device_extensions();
     std::vector<const char*> exts = {VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME, VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME};
@@ -118,6 +118,16 @@ void VulkanContext::create_device(VkSurfaceKHR surface)
         exts.push_back(VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME);
     }
 
+    // DLSS (NGX) needs a handful of NVIDIA extensions; all or nothing.
+    optional_extensions = !optional.empty() &&
+                          std::all_of(optional.begin(), optional.end(), [&](auto& e) { return contains(avail, e.c_str()); });
+    bool buffer_address = false;
+    if (optional_extensions)
+        for (auto& e : optional) {
+            if (std::none_of(exts.begin(), exts.end(), [&](const char* x) { return e == x; })) exts.push_back(e.c_str());
+            if (e == VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) buffer_address = true;
+        }
+
     uint32_t n = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(phys, &n, nullptr);
     std::vector<VkQueueFamilyProperties> qf(n);
@@ -134,33 +144,53 @@ void VulkanContext::create_device(VkSurfaceKHR surface)
         }
     }
     if (queue_family == UINT32_MAX) fail("No Vulkan queue that can draw and present to the window");
+    // Hardware optical flow (motion vectors for DLSS; spike S4): extension + a queue family that runs it.
+    if (contains(avail, VK_NV_OPTICAL_FLOW_EXTENSION_NAME))
+        for (uint32_t i = 0; i < n; ++i)
+            if (qf[i].queueFlags & VK_QUEUE_OPTICAL_FLOW_BIT_NV) {
+                flow_family = i;
+                break;
+            }
+    optical_flow = flow_family != UINT32_MAX;
+    if (optical_flow) exts.push_back(VK_NV_OPTICAL_FLOW_EXTENSION_NAME);  // needs synchronization2 (core 1.3)
 
     VkPhysicalDevicePresentWaitFeaturesKHR pw{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR};
     VkPhysicalDevicePresentIdFeaturesKHR pid{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR, &pw};
     pw.presentWait = VK_TRUE;
     pid.presentId = VK_TRUE;
-    // Two queues of the family when it has them: the render thread's, and one for the capture thread (Vulkan
-    // queues must not be used from two threads at once).
-    const uint32_t queues = std::min(2u, qf[queue_family].queueCount);
-    float prio[2] = {1.0f, 0.5f};
-    VkDeviceQueueCreateInfo qci{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
-    qci.queueFamilyIndex = queue_family;
-    qci.queueCount = queues;
-    qci.pQueuePriorities = prio;
+    // Three queues of the family: the render thread's, the capture thread's and the pipeline thread's (Vulkan
+    // queues must not be used from two threads at once). NVIDIA GPUs have 16; with fewer, work_queue stays null
+    // and the pipeline's Vulkan users (DLSS, optical flow) stay off.
+    const uint32_t queues = std::min(3u, qf[queue_family].queueCount);
+    float prio[3] = {1.0f, 0.5f, 0.5f};
+    VkDeviceQueueCreateInfo qcis[2]{{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO}, {VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO}};
+    qcis[0].queueFamilyIndex = queue_family;
+    qcis[0].queueCount = queues;
+    qcis[0].pQueuePriorities = prio;
+    qcis[1].queueFamilyIndex = flow_family;
+    qcis[1].queueCount = 1;
+    qcis[1].pQueuePriorities = prio + 1;
     // Dynamic rendering (Vulkan 1.3): the app's overlay (ImGui) draws onto the window image without render passes.
     VkPhysicalDeviceVulkan13Features v13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
     v13.dynamicRendering = VK_TRUE;
+    v13.synchronization2 = VK_TRUE;
     v13.pNext = present_wait ? &pid : nullptr;
+    VkPhysicalDeviceVulkan12Features v12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, &v13};
+    v12.bufferDeviceAddress = buffer_address ? VK_TRUE : VK_FALSE;
+    VkPhysicalDeviceOpticalFlowFeaturesNV off{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPTICAL_FLOW_FEATURES_NV, &v12};
+    off.opticalFlow = VK_TRUE;
     VkDeviceCreateInfo ci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
-    ci.pNext = &v13;
-    ci.queueCreateInfoCount = 1;
-    ci.pQueueCreateInfos = &qci;
+    ci.pNext = optical_flow ? static_cast<void*>(&off) : static_cast<void*>(&v12);
+    ci.queueCreateInfoCount = optical_flow ? 2 : 1;
+    ci.pQueueCreateInfos = qcis;
     ci.enabledExtensionCount = uint32_t(exts.size());
     ci.ppEnabledExtensionNames = exts.data();
     NITID_VK(vkCreateDevice(phys, &ci, nullptr, &device));
     vkGetDeviceQueue(device, queue_family, 0, &queue);
     if (queues > 1) vkGetDeviceQueue(device, queue_family, 1, &capture_queue);
     else capture_queue = queue;
+    if (queues > 2) vkGetDeviceQueue(device, queue_family, 2, &work_queue);
+    if (optical_flow) vkGetDeviceQueue(device, flow_family, 0, &flow_queue);
 
     VkCommandPoolCreateInfo pci{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     pci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;

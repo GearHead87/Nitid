@@ -19,7 +19,8 @@ public:
     VulkanContext& operator=(const VulkanContext&) = delete;
 
     // Creates the device. Call once, after any surface exists (so present support can be checked).
-    void create_device(VkSurfaceKHR surface_or_null);
+    // `optional_extensions`: enabled when all of them are available (DLSS needs a set of them; see ngx_extensions).
+    void create_device(VkSurfaceKHR surface_or_null, const std::vector<std::string>& optional_extensions = {});
     bool has_device() const { return device != VK_NULL_HANDLE; }
 
     uint32_t memory_type(uint32_t bits, VkMemoryPropertyFlags want) const;
@@ -34,7 +35,10 @@ public:
     VkDevice device = VK_NULL_HANDLE;
     VkQueue queue = VK_NULL_HANDLE;           // render thread: presenting, overlay
     VkQueue capture_queue = VK_NULL_HANDLE;   // capture thread: DMA-BUF copies (same family; = queue if only one)
+    VkQueue work_queue = VK_NULL_HANDLE;      // pipeline thread: DLSS, optical flow copies (same family; may be null)
     uint32_t queue_family = 0;
+    VkQueue flow_queue = VK_NULL_HANDLE;      // VK_NV_optical_flow (its own queue family on NVIDIA)
+    uint32_t flow_family = UINT32_MAX;
     VkCommandPool pool = VK_NULL_HANDLE;
     VkPhysicalDeviceProperties props{};
     VkPhysicalDeviceMemoryProperties mem{};
@@ -44,6 +48,8 @@ public:
     bool present_wait = false;  // VK_KHR_present_id + VK_KHR_present_wait
     bool swapchain = false;
     bool dma_buf_import = false;  // VK_EXT_external_memory_dma_buf + image_drm_format_modifier + queue_family_foreign
+    bool optional_extensions = false;  // the optional set passed to create_device() is enabled
+    bool optical_flow = false;    // VK_NV_optical_flow with a queue for it
 
 private:
     std::vector<std::string> available_device_extensions() const;

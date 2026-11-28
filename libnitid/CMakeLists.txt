@@ -48,6 +48,22 @@ if(NITID_VFX_RUNTIME_DIR AND NOT EXISTS "${NITID_VFX_RUNTIME_DIR}/libVideoFX.so"
                   "installs it). Nitid will build, but needs NITID_VFX_DIR at run time for AI effects.")
 endif()
 
+# NVIDIA DLSS SDK (NGX): only the separate DLSS module (dlss-module/, libnitid-dlss.so) uses it; libnitid loads that
+# at run time. Without the SDK the module is not built and Nitid has no DLSS. scripts/fetch-sdks.sh downloads it.
+set(NITID_DLSS_SDK_DIR "${NITID_REPO_ROOT}/third_party/DLSS"
+    CACHE PATH "NVIDIA DLSS SDK (include/, lib/Linux_x86_64/libnvsdk_ngx.a)")
+set(NITID_DLSS_RUNTIME_DIR "${NITID_DLSS_SDK_DIR}/lib/Linux_x86_64/rel"
+    CACHE PATH "Developer builds: extra folder searched last for NVIDIA's DLSS runtime (libnvidia-ngx-dlss*.so).
+    Release builds set it empty; users install the runtime with nitid-setup-dlss")
+set(NITID_DLSS_SDK_VERSION "310.9.16" CACHE STRING "DLSS SDK version in NITID_DLSS_SDK_DIR (scripts/fetch-sdks.sh)")
+if(EXISTS "${NITID_DLSS_SDK_DIR}/include/nvsdk_ngx.h" AND EXISTS "${NITID_DLSS_SDK_DIR}/lib/Linux_x86_64/libnvsdk_ngx.a")
+  set(NITID_HAVE_DLSS_SDK ON)
+else()
+  set(NITID_HAVE_DLSS_SDK OFF)
+  message(WARNING "DLSS SDK not found in ${NITID_DLSS_SDK_DIR}: building without the DLSS module "
+                  "(scripts/fetch-sdks.sh downloads it, or set -DNITID_DLSS_SDK_DIR=...)")
+endif()
+
 # --- CUDA kernels (PTX, embedded) ----------------------------------------------------
 #
 # Nitid's own kernels (GPU colour conversion) are compiled to PTX by nvcc and embedded as text; the driver
@@ -96,6 +112,9 @@ add_library(libnitid
   src/gpu/interop.cpp
   src/gpu/kernels.cpp          # embedded PTX kernels (colour conversion)
   src/gpu/spatial_scaler.cpp   # FSR 1 / NIS upscaling (embedded PTX)
+  src/gpu/vk_resources.cpp     # images / command buffers for the pipeline thread's Vulkan work
+  # dlss: the optional DLSS module (loaded at run time) and what uses it
+  src/dlss/runtime.cpp
   # input: frame sources (files now; screen capture and capture cards later)
   src/input/ffmpeg_file_source.cpp
   src/input/scene_cut.cpp
@@ -134,6 +153,7 @@ target_compile_definitions(libnitid PRIVATE
   NITID_VERSION_STRING="${PROJECT_VERSION}"
   NITID_VFX_DEFAULT_DIR="${NITID_VFX_RUNTIME_DIR}"
   NITID_HAVE_KERNELS=${NITID_HAVE_KERNELS}
+  NITID_DLSS_DEFAULT_DIR="${NITID_DLSS_RUNTIME_DIR}"
 )
 if(NITID_HAVE_KERNELS)
   add_dependencies(libnitid nitid_kernels)
@@ -168,6 +188,29 @@ target_include_directories(libnitid PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
+
+# --- DLSS module (libnitid-dlss.so) --------------------------------------------------
+#
+# Holds all DLSS SDK code (NVIDIA's license); talks to libnitid only through src/dlss/plugin_api.h.
+if(NITID_HAVE_DLSS_SDK)
+  add_library(nitid_dlss MODULE dlss-module/nitid_dlss.cpp)
+  set_target_properties(nitid_dlss PROPERTIES
+    OUTPUT_NAME nitid-dlss              # -> libnitid-dlss.so, next to libnitid.so
+    PREFIX lib
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    CXX_VISIBILITY_PRESET hidden        # only nitid_dlss_api() is public
+  )
+  target_compile_features(nitid_dlss PRIVATE cxx_std_23)
+  target_compile_options(nitid_dlss PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-parameter)
+  target_compile_definitions(nitid_dlss PRIVATE NITID_DLSS_SDK_VERSION="${NITID_DLSS_SDK_VERSION}")
+  target_include_directories(nitid_dlss PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_include_directories(nitid_dlss SYSTEM PRIVATE ${NITID_DLSS_SDK_DIR}/include)
+  target_link_options(nitid_dlss PRIVATE -Wl,--no-undefined)
+  target_link_libraries(nitid_dlss PRIVATE "${NITID_DLSS_SDK_DIR}/lib/Linux_x86_64/libnvsdk_ngx.a"
+                        Vulkan::Vulkan ${CMAKE_DL_LIBS} Threads::Threads)
+  add_dependencies(libnitid nitid_dlss)  # built together, so a dev build always has a matching module
+  install(TARGETS nitid_dlss LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
 
 # --- install + CMake package ---------------------------------------------------
 

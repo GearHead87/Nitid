@@ -4,6 +4,7 @@
 #include "audio/audio_player.hpp"
 #include "core/log.hpp"
 #include "core/running_average.hpp"
+#include "dlss/runtime.hpp"
 #include "gpu/cuda_context.hpp"
 #include "gpu/kernels.hpp"
 #include "gpu/vulkan_context.hpp"
@@ -33,6 +34,7 @@ struct Engine::Impl {
     std::unique_ptr<gpu::CudaContext> cuda;
     std::shared_ptr<const vfx::Api> vfx;
     std::unique_ptr<gpu::Kernels> kernels;
+    std::unique_ptr<dlss::Runtime> dlss;  // DLSS module (optional); started once the device exists
 
     std::unique_ptr<output::SwapchainPresenter> presenter;
     std::unique_ptr<input::FrameSource> source;
@@ -92,7 +94,20 @@ struct Engine::Impl {
     void ensure_device(VkSurfaceKHR surface)
     {
         if (vk->has_device()) return;
-        vk->create_device(surface);
+        vk->create_device(surface, dlss ? dlss->device_extensions() : std::vector<std::string>{});
+        caps.optical_flow = vk->optical_flow;
+        if (!dlss) return;
+        std::string why;
+        if (!dlss->start(*vk, &why)) {
+            caps.dlss_error = why;
+            log::warn("DLSS not available: {}", why);
+            return;
+        }
+        caps.dlss_version = dlss->sdk_version();
+        caps.dlss_super_res = dlss->caps().super_res != 0;
+        caps.dlss_frame_gen = dlss->caps().frame_gen != 0;
+        caps.dlss_max_multiplier = caps.dlss_frame_gen ? dlss->caps().max_generated + 1 : 0;
+        if (!caps.dlss_super_res && !caps.dlss_frame_gen) caps.dlss_error = "not supported on this GPU";
     }
 
     // Effect availability: create (not load) each effect once.
@@ -153,6 +168,7 @@ Engine::~Engine()
     impl_->source.reset();
     impl_->presenter.reset();
     impl_->kernels.reset();
+    impl_->dlss.reset();  // NGX shutdown needs the device
     impl_->cuda.reset();
     impl_->vk.reset();
 }
@@ -162,12 +178,23 @@ std::unique_ptr<Engine> Engine::create(const EngineOptions& options)
     std::unique_ptr<Engine> e(new Engine());
     Impl& m = *e->impl_;
     m.options = options;
-    m.vk = std::make_unique<gpu::VulkanContext>(options.instance_extensions, options.validation);
+    std::string why;
+    m.dlss = dlss::Runtime::load(&why);
+    if (!m.dlss) {
+        m.caps.dlss_error = why;
+        log::info("DLSS: {}", why);
+    }
+    auto inst_exts = options.instance_extensions;
+    if (m.dlss)
+        for (auto& e : m.dlss->instance_extensions()) inst_exts.push_back(e);
+    m.vk = std::make_unique<gpu::VulkanContext>(inst_exts, options.validation);
     m.cuda = std::make_unique<gpu::CudaContext>(m.vk->device_uuid);
     m.kernels = std::make_unique<gpu::Kernels>();
     m.caps.gpu_name = m.vk->props.deviceName;
     m.caps.driver_version = m.vk->driver_version();
     m.probe_effects();
+    // Headless use (no window to wait for): create the device now, so DLSS availability is known right away.
+    if (options.instance_extensions.empty()) m.ensure_device(VK_NULL_HANDLE);
     return e;
 }
 

@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# nitid-setup-dlss: download and install NVIDIA's DLSS runtime, which Nitid's DLSS upscaling and DLSS frame
+# generation use. It is NVIDIA software under NVIDIA's license, not part of Nitid, so this script fetches NVIDIA's own
+# files (from the DLSS SDK on github.com/NVIDIA/DLSS), checks their SHA-256, and installs only the two libraries.
+#
+#   nitid-setup-dlss                 install for this user  (~/.local/share/nitid/dlss, about 67 MB)
+#   nitid-setup-dlss --dir DIR       install into DIR/nitid/dlss instead (e.g. --dir /usr/lib for all users)
+#   nitid-setup-dlss --uninstall     remove it again
+#   nitid-setup-dlss --yes           accept NVIDIA's license without asking
+#
+# Nitid finds the runtime there automatically (or set NITID_DLSS_DIR to a folder holding libnvidia-ngx-dlss.so.*).
+set -euo pipefail
+
+DLSS_VERSION=310.9.16
+BASE=https://raw.githubusercontent.com/NVIDIA/DLSS/v${DLSS_VERSION}
+# file  sha256
+FILES=(
+  "lib/Linux_x86_64/rel/libnvidia-ngx-dlss.so.${DLSS_VERSION}  30982c937afed85c96b8d313323de9a650a2eec6de1bb0f714b21750f4ce98f6"
+  "lib/Linux_x86_64/rel/libnvidia-ngx-dlssg.so.${DLSS_VERSION} 574839cae01c835de4d5845c36ca9cf75361f8160bd52397142c36a24e29e6f7"
+  "LICENSE.txt                                                 d4216e39ebef5f9b50a6712ebb37beeb5379862a67733a9999c651f21592aaf0"
+)
+LICENSE_URL=$BASE/LICENSE.txt
+
+root="${XDG_DATA_HOME:-$HOME/.local/share}"
+uninstall=0 yes=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dir) root="$2"; shift 2 ;;
+    --uninstall) uninstall=1; shift ;;
+    -y|--yes) yes=1; shift ;;
+    -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "unknown option: $1 (see --help)" >&2; exit 2 ;;
+  esac
+done
+dest="$root/nitid/dlss"
+
+if [ "$uninstall" = 1 ]; then
+  rm -rf "$dest"
+  echo "removed $dest"
+  exit 0
+fi
+
+if [ -f "$dest/libnvidia-ngx-dlss.so.$DLSS_VERSION" ] && [ "$(cat "$dest/VERSION" 2>/dev/null)" = "$DLSS_VERSION" ]; then
+  echo "NVIDIA DLSS runtime $DLSS_VERSION is already installed in $dest"
+  exit 0
+fi
+
+for tool in curl sha256sum; do
+  command -v "$tool" >/dev/null || { echo "nitid-setup-dlss needs '$tool'" >&2; exit 1; }
+done
+
+cat <<EOF
+Nitid's DLSS upscaling and frame generation use NVIDIA's DLSS runtime $DLSS_VERSION (about 67 MB).
+It is NVIDIA software under NVIDIA's license (the NVIDIA RTX SDKs license), not part of Nitid:
+  $LICENSE_URL
+It will be downloaded from $BASE/
+and installed into $dest
+EOF
+if [ "$yes" != 1 ]; then
+  read -r -p "Accept NVIDIA's license and install? [y/N] " answer
+  case "$answer" in y|Y|yes|YES) ;; *) echo "cancelled"; exit 1 ;; esac
+fi
+
+mkdir -p "$root/nitid"
+tmp=$(mktemp -d "$root/nitid/.dlss-download.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+mkdir "$tmp/files"
+for entry in "${FILES[@]}"; do
+  read -r path sum <<<"$entry"
+  name=$(basename "$path")
+  echo ">> $name"
+  curl -fL --retry 3 --progress-bar -o "$tmp/files/$name" "$BASE/$path"
+  echo "$sum  $tmp/files/$name" | sha256sum -c --quiet - || { echo "$name is corrupt (SHA-256 mismatch)" >&2; exit 1; }
+done
+chmod 0755 "$tmp"/files/*.so.*
+echo "$DLSS_VERSION" > "$tmp/files/VERSION"
+rm -rf "$dest"
+mv "$tmp/files" "$dest"
+echo "installed NVIDIA DLSS runtime $DLSS_VERSION into $dest"
+echo "check with: nitid-cli info"

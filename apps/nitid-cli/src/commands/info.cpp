@@ -24,6 +24,17 @@ Runner add_info_command(CLI::App& app)
         std::println("Frame gen       {}", c.frame_gen ? "yes (VFX Video Frame Generation)" : "no");
         if (c.vfx_version.empty())
             std::println("                AI effects need NVIDIA's VFX runtime: run nitid-setup-vfx once");
+        if (c.dlss_version.empty()) {
+            std::println("DLSS            not available: {}", c.dlss_error);
+        } else {
+            std::println("DLSS            {}", c.dlss_version);
+            std::println("  upscaling     {}", c.dlss_super_res ? "yes (DLSS Super Resolution)" : "no");
+            if (c.dlss_frame_gen)
+                std::println("  frame gen     yes (DLSS Frame Generation, up to {}x)", c.dlss_max_multiplier);
+            else
+                std::println("  frame gen     no (needs an RTX 40 / 50 GPU)");
+        }
+        std::println("Optical flow    {}", c.optical_flow ? "yes (VK_NV_optical_flow)" : "no");
         if (!file->empty()) {
             auto s = engine->open_file(*file);
             std::println("File            {}", s.name);

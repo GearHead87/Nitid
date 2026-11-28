@@ -32,6 +32,15 @@ struct Capabilities {
     std::string vfx_error;       // why VFX is unavailable, if it is
     bool super_res = false;      // VFX Video Super Resolution can be used
     bool frame_gen = false;      // VFX Video Frame Generation can be used (needs RTX 40/50)
+
+    // NVIDIA DLSS (Nitid's optional DLSS module + NVIDIA's DLSS runtime, nitid-setup-dlss). Known once the GPU device
+    // exists: right after create() for headless use, after attach_window() for a window.
+    std::string dlss_version;     // DLSS SDK version, empty if DLSS can't be used
+    std::string dlss_error;       // why DLSS is unavailable, if it is
+    bool dlss_super_res = false;  // DLSS Super Resolution (RTX 20 and newer)
+    bool dlss_frame_gen = false;  // DLSS Frame Generation (RTX 40 and newer)
+    int dlss_max_multiplier = 0;  // DLSS frame generation: 2 (RTX 40) .. 6 (RTX 50)
+    bool optical_flow = false;    // hardware optical flow (motion for DLSS)
 };
 
 // The Nitid engine: input -> AI upscaling -> AI frame generation -> window or CPU buffer.
