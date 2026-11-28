@@ -18,7 +18,8 @@ enum class Upscaler : std::uint8_t {
                   // video's own size it runs as DLAA (anti-aliasing / temporal clean-up)
 };
 
-// DLSS model. Auto = NVIDIA's default for the scale (K up to 1.5x and for DLAA, M around 2x, L at 3x).
+// DLSS model. Auto = M when upscaling (the best on video with motion vectors at 1.5x and 2x) and K at the same size
+// (DLAA), from Nitid's tests (tests/v0.5/03); NVIDIA's own defaults (K up to 1.5x, M at 2x, L at 3x) are for games.
 enum class DlssPreset : std::uint8_t { Auto = 0, J = 10, K = 11, L = 12, M = 13 };
 
 // VFX Video Super Resolution quality levels (values match the SDK's QualityLevel).

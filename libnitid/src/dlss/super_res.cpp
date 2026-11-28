@@ -79,7 +79,8 @@ void SuperRes::run(bool reset_history)
     VkCommandBuffer cb = runner_.begin();
     gpu::copy_buffer_to_image(cb, in_buf_->buffer(), color_);
     gpu::transition(cb, color_, VK_IMAGE_LAYOUT_GENERAL);
-    gpu::Image& mv = motion_ ? *motion_ : zero_motion_;
+    if (flow_) flow_->record_upload(cb);
+    gpu::Image& mv = flow_ ? flow_->motion_image() : zero_motion_;
     gpu::transition(cb, mv, VK_IMAGE_LAYOUT_GENERAL);
     gpu::transition(cb, out_, VK_IMAGE_LAYOUT_GENERAL);
     NitidDlssSuperResEval e{ngx_image(color_), ngx_image(mv), ngx_image(depth_), ngx_image(out_), reset_history ? 1 : 0};

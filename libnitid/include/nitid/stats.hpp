@@ -11,6 +11,7 @@ struct StageTimes {
     double upload_ms = 0;     // CPU frame -> GPU (per source frame)
     double upscale_ms = 0;    // upscaling or clean-up (per source frame)
     double frame_gen_ms = 0;  // VFX frame generation (per generated frame)
+    double motion_ms = 0;     // optical flow motion vectors for DLSS (per source frame), 0 when not used
     double output_ms = 0;     // copy to the display / CPU buffer (per output frame)
 };
 

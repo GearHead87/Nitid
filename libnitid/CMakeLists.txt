@@ -113,6 +113,7 @@ add_library(libnitid
   src/gpu/kernels.cpp          # embedded PTX kernels (colour conversion)
   src/gpu/spatial_scaler.cpp   # FSR 1 / NIS upscaling (embedded PTX)
   src/gpu/vk_resources.cpp     # images / command buffers for the pipeline thread's Vulkan work
+  src/gpu/optical_flow.cpp     # motion vectors for DLSS (VK_NV_optical_flow)
   # dlss: the optional DLSS module (loaded at run time) and what uses it
   src/dlss/runtime.cpp
   src/dlss/super_res.cpp       # DLSS Super Resolution on video frames

@@ -23,6 +23,7 @@ Pipeline::~Pipeline()
 {
     cuda_.sync();
     dlss_sr_.reset();  // before the Vulkan device / DLSS runtime go
+    flow_.reset();
 }
 
 template <class F> void Pipeline::timed(RunningAverage& avg, F&& fn)
@@ -50,6 +51,7 @@ void Pipeline::restart()
     ended_ = false;
     pending_cut_ = false;
     dlss_reset_ = true;
+    if (flow_) flow_->reset();
 }
 
 void Pipeline::allocate_ring()
@@ -145,10 +147,33 @@ void Pipeline::configure(Size box, const Settings& settings)
     } else if (sr_ && sr_->configured()) {
         sr_->reset();  // free the model's memory
     }
+    // Motion from optical flow (source size): for DLSS when it upscales. At the same size (DLAA) motion vectors made
+    // it worse (tests/v0.5/03: 40.45 -> 39.18 dB), so DLAA runs without.
+    const bool want_flow = up_ == Up::Dlss && !(work_ == src_);
+    flow_active_ = false;
+    if (want_flow && gx_.vk && gx_.kernels && gpu::OpticalFlow::available(*gx_.vk, *gx_.kernels)) {
+        try {
+            if (!flow_) flow_ = std::make_unique<gpu::OpticalFlow>(*gx_.vk, cuda_, *gx_.kernels);
+            flow_->configure(src_.w, src_.h);
+            flow_->reset();
+            flow_active_ = true;
+        } catch (const Error& e) {
+            log::error("optical flow: {} (DLSS gets no motion vectors)", e.what());
+            flow_.reset();
+        }
+    } else if (want_flow) {
+        log::warn("no hardware optical flow: DLSS gets no motion vectors");
+    }
+    if (!want_flow && flow_) flow_.reset();
     if (up_ == Up::Dlss) {
         try {
             if (!dlss_sr_) dlss_sr_ = std::make_unique<dlss::SuperRes>(*gx_.vk, cuda_, *gx_.dlss);
-            dlss_sr_->configure(src_.w, src_.h, work_.w, work_.h, int(settings.dlss_preset));
+            dlss_sr_->set_motion(flow_active_ ? flow_.get() : nullptr);
+            // Auto: preset M when upscaling (best on video at 1.5x and 2x with motion), K for DLAA (tests/v0.5/03).
+            const DlssPreset preset = settings.dlss_preset != DlssPreset::Auto ? settings.dlss_preset
+                                      : work_ == src_                         ? DlssPreset::K
+                                                                              : DlssPreset::M;
+            dlss_sr_->configure(src_.w, src_.h, work_.w, work_.h, int(preset));
             dlss_reset_ = true;
         } catch (const Error& e) {
             log::error("{}", e.what());
@@ -206,6 +231,10 @@ void Pipeline::upload(input::DecodedFrame& f, Slot& dst, bool cut)
         });
     } else if (up_ == Up::Dlss) {
         timed(upload_ms_, [&] { copy_in(dlss_sr_->input()); });
+        if (flow_active_) {
+            if (cut || dlss_reset_) flow_->reset();  // no motion across a cut or a seek
+            timed(motion_ms_, [&] { flow_->push(dlss_sr_->input()); });
+        }
         timed(upscale_ms_, [&] {
             dlss_sr_->run(dlss_reset_ || cut);  // a new shot: don't carry detail over from the old one
             NITID_CU(cuMemcpyDtoDAsync(dst.buf.ptr(), dlss_sr_->output(), size_t(work_.w) * work_.h * 4, cuda_.stream));
@@ -372,11 +401,12 @@ void Pipeline::fill_stats(Stats& s) const
     s.avg.upload_ms = upload_ms_.value();
     s.avg.upscale_ms = upscale_ms_.value();
     s.avg.frame_gen_ms = frame_gen_ms_.value();
+    s.avg.motion_ms = flow_active_ ? motion_ms_.value() : 0;
 }
 
 void Pipeline::reset_stats()
 {
-    decode_ms_.reset(), upload_ms_.reset(), upscale_ms_.reset(), frame_gen_ms_.reset();
+    decode_ms_.reset(), upload_ms_.reset(), upscale_ms_.reset(), frame_gen_ms_.reset(), motion_ms_.reset();
     source_frames_ = skipped_ = generated_ = cuts_ = 0;
 }
 

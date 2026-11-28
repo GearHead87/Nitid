@@ -34,8 +34,17 @@ public:
     // Captured frames: BGRx / RGBx (4 bytes per pixel, row pitch `pitch`) -> RGBA8 (alpha 255), tightly packed.
     void rgbx_to_rgba(CUdeviceptr src, size_t pitch, CUdeviceptr rgba, int width, int height, bool bgr, CUstream stream);
 
+    // Motion for DLSS: RGBA8 -> 8-bit luma (tightly packed); optical flow grid (S10.5 pairs, fw x fh, `grid` pixels per
+    // cell) -> per-pixel R16G16 half motion vectors (w x h), bilinear.
+    bool has_motion_kernels() const { return luma_ && flow_ != nullptr; }
+    void rgba_to_luma(CUdeviceptr rgba, CUdeviceptr luma, int width, int height, CUstream stream);
+    void flow_to_motion(CUdeviceptr flow, int fw, int fh, int grid, CUdeviceptr motion, int width, int height, float scale,
+                        CUstream stream);
+
 private:
     CUmodule module_ = nullptr;
+    CUfunction luma_ = nullptr;
+    CUfunction flow_ = nullptr;
     CUfunction rgbx_ = nullptr;
     CUfunction yuv_to_rgba_ = nullptr;
     CUfunction luma_thumb_ = nullptr;

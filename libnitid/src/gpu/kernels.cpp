@@ -55,6 +55,9 @@ Kernels::Kernels()
         log::warn("GPU colour conversion unavailable (kernels missing); using the CPU");
     }
     if (cuModuleGetFunction(&rgbx_, module_, "rgbx_to_rgba") != CUDA_SUCCESS) rgbx_ = nullptr;
+    if (cuModuleGetFunction(&luma_, module_, "rgba_to_luma") != CUDA_SUCCESS ||
+        cuModuleGetFunction(&flow_, module_, "flow_to_motion") != CUDA_SUCCESS)
+        luma_ = flow_ = nullptr;
 #else
     log::info("built without nvcc: colour conversion runs on the CPU");
 #endif
@@ -87,6 +90,19 @@ void Kernels::rgbx_to_rgba(CUdeviceptr src, size_t pitch, CUdeviceptr rgba, int 
     int b = bgr ? 1 : 0;
     void* args[] = {&src, &pitch, &rgba, &w, &h, &b};
     NITID_CU(cuLaunchKernel(rgbx_, div_up(w, 32), div_up(h, 8), 1, 32, 8, 1, 0, stream, args, nullptr));
+}
+
+void Kernels::rgba_to_luma(CUdeviceptr rgba, CUdeviceptr luma, int w, int h, CUstream stream)
+{
+    void* args[] = {&rgba, &luma, &w, &h};
+    NITID_CU(cuLaunchKernel(luma_, div_up(w, 32), div_up(h, 8), 1, 32, 8, 1, 0, stream, args, nullptr));
+}
+
+void Kernels::flow_to_motion(CUdeviceptr flow, int fw, int fh, int grid, CUdeviceptr motion, int w, int h, float scale,
+                             CUstream stream)
+{
+    void* args[] = {&flow, &fw, &fh, &grid, &motion, &w, &h, &scale};
+    NITID_CU(cuLaunchKernel(flow_, div_up(w, 32), div_up(h, 8), 1, 32, 8, 1, 0, stream, args, nullptr));
 }
 
 } // namespace nitid::gpu

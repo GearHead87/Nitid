@@ -224,7 +224,7 @@ void PlayerUi::settings_panel(nitid::Engine& e, nitid::Settings& s, const nitid:
             {DlssPreset::Auto, "Auto"}, {DlssPreset::J, "J"}, {DlssPreset::K, "K"}, {DlssPreset::L, "L"}, {DlssPreset::M, "M"}};
         choice("Preset##dlss", s.dlss_preset, p);
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("DLSS model. Auto: NVIDIA's choice for the scale (K up to 1.5x, M at 2x, L at 3x).");
+            ImGui::SetTooltip("DLSS model. Auto: M when upscaling, K at the video's own size (DLAA): the best on video in Nitid's tests.");
     } else if (s.upscaler == Upscaler::VfxSuperRes) {
         static const std::pair<SuperResQuality, const char*> q[] = {
             {SuperResQuality::Low, "Low"}, {SuperResQuality::Medium, "Medium"}, {SuperResQuality::High, "High"}, {SuperResQuality::Ultra, "Ultra"}};

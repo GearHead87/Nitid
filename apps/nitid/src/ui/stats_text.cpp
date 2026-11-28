@@ -88,6 +88,7 @@ std::string stats_report(const nitid::SourceInfo& src, const nitid::Settings& s,
                          st.capture_dropped, st.avg.decode_ms);
     r += std::format("Avg ms:   decode+convert {:.2f} | upload {:.2f} | upscale {:.2f} | frame gen {:.2f} | output {:.2f}\n",
                      st.avg.decode_ms, st.avg.upload_ms, st.avg.upscale_ms, st.avg.frame_gen_ms, st.avg.output_ms);
+    if (st.avg.motion_ms > 0) r += std::format("Motion:   optical flow {:.2f} ms per source frame\n", st.avg.motion_ms);
     return r;
 }
 

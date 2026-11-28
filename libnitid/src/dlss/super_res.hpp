@@ -10,6 +10,7 @@
 // flow (set_motion) or are zero. DLSS then works as a temporal upscaler (it accumulates detail from earlier frames
 // along the motion); its history is reset at scene cuts and seeks.
 #include "dlss/runtime.hpp"
+#include "gpu/optical_flow.hpp"
 #include "gpu/interop.hpp"
 #include "gpu/vk_resources.hpp"
 
@@ -33,8 +34,9 @@ public:
 
     CUdeviceptr input() const { return in_buf_->ptr(); }    // write the RGBA8 input frame here
     CUdeviceptr output() const { return out_buf_->ptr(); }  // RGBA8 result, after run()
-    // Motion vectors for the next run(): R16G16_SFLOAT pixels, current -> previous frame, input size; nullptr = zero.
-    void set_motion(gpu::Image* motion) { motion_ = motion; }
+    // Motion vectors (input size, current -> previous frame) for run(): copied in from `flow` (its latest result);
+    // nullptr = zero motion.
+    void set_motion(gpu::OpticalFlow* flow) { flow_ = flow; }
     // Runs DLSS on input() (CUDA work on it must be finished). reset: forget the history (cut, seek, first frame).
     void run(bool reset);
 
@@ -49,7 +51,7 @@ private:
     void* feature_ = nullptr;
     std::unique_ptr<gpu::SharedBuffer> in_buf_, out_buf_;
     gpu::Image color_, zero_motion_, depth_, out_;
-    gpu::Image* motion_ = nullptr;
+    gpu::OpticalFlow* flow_ = nullptr;
     std::string mode_;
     int preset_ = 0;
 };

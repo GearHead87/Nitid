@@ -95,6 +95,7 @@ struct Engine::Impl {
     {
         pipeline::GpuExtras g;
         g.vk = vk.get();
+        g.kernels = kernels.get();
         g.dlss = dlss && dlss->started() ? dlss.get() : nullptr;
         g.dlss_note = caps.dlss_error;
         return g;

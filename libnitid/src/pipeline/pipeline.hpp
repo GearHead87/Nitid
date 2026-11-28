@@ -37,6 +37,7 @@ struct Output {
 // GPU pieces beyond CUDA + VFX, used by the DLSS stages (all may be missing).
 struct GpuExtras {
     gpu::VulkanContext* vk = nullptr;     // device with the pipeline thread's queue (work_queue)
+    gpu::Kernels* kernels = nullptr;      // optical flow's luma / motion kernels
     const dlss::Runtime* dlss = nullptr;  // started DLSS runtime, or nullptr
     std::string dlss_note;                // why DLSS is unavailable, if it is
 };
@@ -106,6 +107,8 @@ private:
     std::unique_ptr<vfx::SuperRes> sr_;
     std::unique_ptr<gpu::SpatialScaler> spatial_;
     std::unique_ptr<dlss::SuperRes> dlss_sr_;
+    std::unique_ptr<gpu::OpticalFlow> flow_;  // motion for DLSS (source size)
+    bool flow_active_ = false;
     std::unique_ptr<vfx::FrameGen> fg_;
     gpu::CudaBuffer upload_;  // source-size frame (VSR input)
     Slot slots_[2];
@@ -115,7 +118,7 @@ private:
     bool pending_cut_ = false;  // cut seen on a skipped frame, carried to the next uploaded one
 
     // Stats
-    RunningAverage decode_ms_, upload_ms_, upscale_ms_, frame_gen_ms_;
+    RunningAverage decode_ms_, upload_ms_, upscale_ms_, frame_gen_ms_, motion_ms_;
     uint64_t source_frames_ = 0, skipped_ = 0, generated_ = 0, cuts_ = 0;
 };
 

@@ -247,6 +247,7 @@ void RenderAhead::fill_stats(Stats& s) const
     s.generated_frames = p.generated_frames, s.scene_cuts = p.scene_cuts;
     s.avg.decode_ms = p.avg.decode_ms, s.avg.upload_ms = p.avg.upload_ms;
     s.avg.upscale_ms = p.avg.upscale_ms, s.avg.frame_gen_ms = p.avg.frame_gen_ms;
+    s.avg.motion_ms = p.avg.motion_ms;
     s.late_frames = late_;
     s.frame_gen_stride = (p.frame_gen_active && settings_.frame_gen_multiplier == 0) ? stride_ : 0;
 }

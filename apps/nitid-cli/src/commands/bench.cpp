@@ -113,6 +113,7 @@ int run(const BenchOptions& o)
     std::println("| Decode + convert (per source frame, decoder thread) | {:.2f} ms |", st.avg.decode_ms);
     std::println("| Upload (per source frame) | {:.2f} ms |", st.avg.upload_ms);
     std::println("| Upscale / clean-up (per source frame) | {:.2f} ms |", st.avg.upscale_ms);
+    if (st.avg.motion_ms > 0) std::println("| Motion vectors, optical flow (per source frame) | {:.2f} ms |", st.avg.motion_ms);
     std::println("| Frame gen (per generated frame) | {:.2f} ms |", st.avg.frame_gen_ms);
     std::println("| Copy to CPU (per output frame) | {} |", writer ? std::format("{:.2f} ms", st.avg.output_ms) : "not done (no --output)");
     if (writer) std::println("| Saved | {} |", o.output);

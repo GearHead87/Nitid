@@ -88,3 +88,43 @@ extern "C" __global__ void rgbx_to_rgba(const unsigned char* src, size_t src_pit
     const uchar4 p = *reinterpret_cast<const uchar4*>(src + size_t(y) * src_pitch + size_t(x) * 4);
     reinterpret_cast<uchar4*>(out)[size_t(y) * w + x] = bgr ? make_uchar4(p.z, p.y, p.x, 255) : make_uchar4(p.x, p.y, p.z, 255);
 }
+
+// --- Motion for DLSS (optical flow) ---------------------------------------------------------------------------------
+
+// RGBA8 -> 8-bit luma (BT.601 weights), the optical flow engine's input.
+extern "C" __global__ void rgba_to_luma(const uchar4* rgba, unsigned char* luma, int w, int h)
+{
+    const int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= w || y >= h) return;
+    const uchar4 p = rgba[size_t(y) * w + x];
+    luma[size_t(y) * w + x] = (unsigned char)(0.299f * p.x + 0.587f * p.y + 0.114f * p.z + 0.5f);
+}
+
+// Half-precision bits of f (round to nearest even; finite inputs only, no NaN handling needed for flow).
+__device__ __forceinline__ unsigned short half_bits(float f)
+{
+    unsigned short h;
+    asm("cvt.rn.f16.f32 %0, %1;" : "=h"(h) : "f"(f));
+    return h;
+}
+
+// Optical flow grid (S10.5 fixed point pairs, one per `grid` x `grid` block, flow from the current frame to the
+// previous one in pixels) -> per-pixel motion vectors, R16G16_SFLOAT, bilinear between block centres (nearest
+// blocks made DLSS-G tear edges into 4x4 tiles in spike F1).
+extern "C" __global__ void flow_to_motion(const short2* flow, int fw, int fh, int grid, unsigned int* motion, int w, int h,
+                                          float scale)
+{
+    const int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= w || y >= h) return;
+    const float gx = fminf(fmaxf((x + 0.5f) / grid - 0.5f, 0.0f), float(fw - 1));
+    const float gy = fminf(fmaxf((y + 0.5f) / grid - 0.5f, 0.0f), float(fh - 1));
+    const int x0 = int(gx), y0 = int(gy);
+    const int x1 = min(x0 + 1, fw - 1), y1 = min(y0 + 1, fh - 1);
+    const float ax = gx - x0, ay = gy - y0;
+    const short2 a = flow[y0 * fw + x0], b = flow[y0 * fw + x1], c = flow[y1 * fw + x0], d = flow[y1 * fw + x1];
+    const float vx = ((a.x * (1 - ax) + b.x * ax) * (1 - ay) + (c.x * (1 - ax) + d.x * ax) * ay) * (scale / 32.0f);
+    const float vy = ((a.y * (1 - ax) + b.y * ax) * (1 - ay) + (c.y * (1 - ax) + d.y * ax) * ay) * (scale / 32.0f);
+    motion[size_t(y) * w + x] = unsigned(half_bits(vx)) | (unsigned(half_bits(vy)) << 16);
+}
