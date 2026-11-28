@@ -98,8 +98,8 @@ int run(const BenchOptions& o)
     std::println("");
     std::println("| Item | Value |");
     std::println("|---|---|");
-    std::println("| Upscaling | {} |", st.upscaler_active ? nitid::upscaling_name(s)
-                                                           : std::format("off ({})", st.upscaler_note));
+    std::println("| Upscaling | {}{} |", st.upscaler_active ? nitid::upscaling_name(s) : std::format("off ({})", st.upscaler_note),
+                 st.upscaler_mode.empty() ? std::string() : " (" + st.upscaler_mode + ")");
     std::println("| Clean-up | {} |", st.cleanup_active ? std::format("{} {}", nitid::to_string(s.cleanup), nitid::to_string(s.cleanup_strength))
                                                         : s.cleanup == nitid::Cleanup::Off ? std::string("off") : "not running (" + st.cleanup_note + ")");
     std::println("| Frame generation | {} |",
@@ -126,8 +126,9 @@ Runner add_bench_command(CLI::App& app)
     auto o = std::make_shared<BenchOptions>();
     auto* cmd = app.add_subcommand("bench", "Run the pipeline on a file without a window; report speed, optionally save the result");
     cmd->add_option("file", o->file, "Video file")->required()->check(CLI::ExistingFile);
-    cmd->add_option("--upscale", o->upscale, "Upscaling: VSR (AI) quality bicubic, low, medium, high, ultra; fsr; nis; off")
-        ->check(CLI::IsMember({"off", "bicubic", "low", "medium", "high", "ultra", "fsr", "nis"}))
+    cmd->add_option("--upscale", o->upscale,
+                    "Upscaling: VSR (AI) quality bicubic, low, medium, high, ultra; dlss (or dlss-j/k/l/m: DLSS preset); fsr; nis; off")
+        ->check(CLI::IsMember({"off", "bicubic", "low", "medium", "high", "ultra", "dlss", "dlss-j", "dlss-k", "dlss-l", "dlss-m", "fsr", "nis"}))
         ->capture_default_str();
     cmd->add_option("--frame-gen", o->frame_gen, "Frame generation: off, low, medium, high")
         ->check(CLI::IsMember({"off", "low", "medium", "high"}))

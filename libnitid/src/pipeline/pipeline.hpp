@@ -2,11 +2,12 @@
 
 // The processing chain, independent of where frames come from and where they go:
 //
-//   FrameSource --upload--> [upscaler: VFX VSR, FSR 1 or NIS] --> two-frame ring (current, next) --> [VFX frame gen] --> output
+//   FrameSource --upload--> [upscaler: VFX VSR, DLSS, FSR 1 or NIS] --> two-frame ring (current, next) --> [VFX frame gen] --> output
 //
 // produce(position) returns a GPU pointer to the RGBA8 frame for that moment: a real frame, or one
 // generated between `current` and `next`. Callers (window presenter, headless runner) copy it out.
 #include "core/running_average.hpp"
+#include "dlss/super_res.hpp"
 #include "gpu/cuda_context.hpp"
 #include "gpu/spatial_scaler.hpp"
 #include "input/frame_source.hpp"
@@ -33,9 +34,17 @@ struct Output {
     double arrival_s = 0;  // live sources: when the (newest real) frame shown arrived
 };
 
+// GPU pieces beyond CUDA + VFX, used by the DLSS stages (all may be missing).
+struct GpuExtras {
+    gpu::VulkanContext* vk = nullptr;     // device with the pipeline thread's queue (work_queue)
+    const dlss::Runtime* dlss = nullptr;  // started DLSS runtime, or nullptr
+    std::string dlss_note;                // why DLSS is unavailable, if it is
+};
+
 class Pipeline {
 public:
-    Pipeline(gpu::CudaContext& cuda, std::shared_ptr<const vfx::Api> vfx, bool can_super_res, bool can_frame_gen);
+    Pipeline(gpu::CudaContext& cuda, std::shared_ptr<const vfx::Api> vfx, bool can_super_res, bool can_frame_gen,
+             GpuExtras extras = {});
     ~Pipeline();
 
     void set_source(input::FrameSource* source);  // nullptr = none; clears the ring
@@ -72,21 +81,23 @@ private:
     };
 
     bool fetch_next(int64_t min_index);  // decode + upload one frame into slots_[next_]
-    void upload(input::DecodedFrame& f, Slot& dst);
+    void upload(input::DecodedFrame& f, Slot& dst, bool cut);
     void allocate_ring();
     template <class F> void timed(RunningAverage& avg, F&& fn);
 
     gpu::CudaContext& cuda_;
     std::shared_ptr<const vfx::Api> vfx_;
     bool can_sr_, can_fg_;
+    GpuExtras gx_;
     input::FrameSource* source_ = nullptr;
 
     Settings settings_;
     Size box_, src_, work_;
-    enum class Up { None, Vsr, Spatial };
+    enum class Up { None, Vsr, Spatial, Dlss };
     Up up_ = Up::None;  // upscaler actually running
     bool sr_active_ = false, fg_active_ = false;  // sr_active_: any upscaler running
-    bool sr_failed_ = false, fg_failed_ = false;
+    bool sr_failed_ = false, fg_failed_ = false, dlss_failed_ = false;
+    bool dlss_reset_ = true;  // DLSS history: start over with the next frame (start, seek, new size)
     bool compare_ = false;
     double live_interval_ = 0, last_arrival_ = 0;
     std::string sr_note_, fg_note_, cleanup_note_;
@@ -94,6 +105,7 @@ private:
 
     std::unique_ptr<vfx::SuperRes> sr_;
     std::unique_ptr<gpu::SpatialScaler> spatial_;
+    std::unique_ptr<dlss::SuperRes> dlss_sr_;
     std::unique_ptr<vfx::FrameGen> fg_;
     gpu::CudaBuffer upload_;  // source-size frame (VSR input)
     Slot slots_[2];

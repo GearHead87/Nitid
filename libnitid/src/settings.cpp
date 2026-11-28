@@ -9,6 +9,7 @@ std::string_view to_string(Upscaler u) noexcept
         case Upscaler::VfxSuperRes: return "VFX VSR";
         case Upscaler::Fsr1: return "FSR 1";
         case Upscaler::Nis: return "NIS";
+        case Upscaler::Dlss: return "DLSS";
     }
     return "?";
 }
@@ -63,6 +64,18 @@ std::string_view to_string(FrameGenQuality q) noexcept
     return "?";
 }
 
+std::string_view to_string(DlssPreset p) noexcept
+{
+    switch (p) {
+        case DlssPreset::Auto: return "auto";
+        case DlssPreset::J: return "J";
+        case DlssPreset::K: return "K";
+        case DlssPreset::L: return "L";
+        case DlssPreset::M: return "M";
+    }
+    return "?";
+}
+
 std::string upscaling_name(const Settings& s)
 {
     switch (s.upscaler) {
@@ -70,6 +83,8 @@ std::string upscaling_name(const Settings& s)
         case Upscaler::VfxSuperRes: return "VSR " + std::string(to_string(s.super_res_quality));
         case Upscaler::Fsr1:
         case Upscaler::Nis: return std::string(to_string(s.upscaler));
+        case Upscaler::Dlss:
+            return s.dlss_preset == DlssPreset::Auto ? "DLSS" : "DLSS preset " + std::string(to_string(s.dlss_preset));
     }
     return "?";
 }
@@ -86,6 +101,22 @@ bool parse_upscaling(std::string_view name, Settings& s) noexcept
     }
     if (name == "nis") {
         s.upscaler = Upscaler::Nis;
+        return true;
+    }
+    if (name.starts_with("dlss")) {
+        auto rest = name.substr(4);
+        DlssPreset p = DlssPreset::Auto;
+        if (!rest.empty()) {
+            if (rest.size() != 2 || rest[0] != '-') return false;
+            const char c = rest[1];
+            if (c == 'j') p = DlssPreset::J;
+            else if (c == 'k') p = DlssPreset::K;
+            else if (c == 'l') p = DlssPreset::L;
+            else if (c == 'm') p = DlssPreset::M;
+            else return false;
+        }
+        s.upscaler = Upscaler::Dlss;
+        s.dlss_preset = p;
         return true;
     }
     for (auto q : {SuperResQuality::Bicubic, SuperResQuality::Low, SuperResQuality::Medium, SuperResQuality::High,

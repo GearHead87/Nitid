@@ -210,11 +210,22 @@ void PlayerUi::settings_panel(nitid::Engine& e, nitid::Settings& s, const nitid:
     const Settings before = s;
 
     ImGui::SeparatorText("Upscaling");
-    static const std::pair<Upscaler, const char*> ups[] = {
-        {Upscaler::VfxSuperRes, "VSR (NVIDIA AI)"}, {Upscaler::Fsr1, "FSR 1 (AMD)"}, {Upscaler::Nis, "NIS (NVIDIA)"}, {Upscaler::Off, "Off"}};
-    const bool ups_ok[] = {caps.super_res, true, true, true};
+    static const std::pair<Upscaler, const char*> ups[] = {{Upscaler::VfxSuperRes, "VSR (NVIDIA AI)"},
+                                                           {Upscaler::Dlss, "DLSS (NVIDIA AI)"},
+                                                           {Upscaler::Fsr1, "FSR 1 (AMD)"},
+                                                           {Upscaler::Nis, "NIS (NVIDIA)"},
+                                                           {Upscaler::Off, "Off"}};
+    const bool ups_ok[] = {caps.super_res, caps.dlss_super_res, true, true, true};
     choice("Upscaler", s.upscaler, ups, ups_ok);
-    if (s.upscaler == Upscaler::VfxSuperRes) {
+    if (!caps.dlss_super_res && ImGui::IsItemHovered())
+        ImGui::SetTooltip("DLSS: %s", caps.dlss_error.empty() ? "not available" : caps.dlss_error.c_str());
+    if (s.upscaler == Upscaler::Dlss) {
+        static const std::pair<DlssPreset, const char*> p[] = {
+            {DlssPreset::Auto, "Auto"}, {DlssPreset::J, "J"}, {DlssPreset::K, "K"}, {DlssPreset::L, "L"}, {DlssPreset::M, "M"}};
+        choice("Preset##dlss", s.dlss_preset, p);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("DLSS model. Auto: NVIDIA's choice for the scale (K up to 1.5x, M at 2x, L at 3x).");
+    } else if (s.upscaler == Upscaler::VfxSuperRes) {
         static const std::pair<SuperResQuality, const char*> q[] = {
             {SuperResQuality::Low, "Low"}, {SuperResQuality::Medium, "Medium"}, {SuperResQuality::High, "High"}, {SuperResQuality::Ultra, "Ultra"}};
         choice("Quality##vsr", s.super_res_quality, q);
@@ -222,8 +233,9 @@ void PlayerUi::settings_panel(nitid::Engine& e, nitid::Settings& s, const nitid:
         ImGui::SliderFloat("Sharpness", &s.sharpness, 0.0f, 1.0f, "%.2f");
     }
     if (st.upscaler_active)
-        dim_text(std::format("{}x{} -> {}x{}, {:.2f} ms per frame", st.source_width, st.source_height, st.work_width,
-                             st.work_height, st.avg.upscale_ms));
+        dim_text(std::format("{}x{} -> {}x{}{}, {:.2f} ms per frame", st.source_width, st.source_height, st.work_width,
+                             st.work_height, st.upscaler_mode.empty() ? "" : " (" + st.upscaler_mode + ")",
+                             st.avg.upscale_ms));
     else
         dim_text(std::format("Not running: {}", st.upscaler_note));
 

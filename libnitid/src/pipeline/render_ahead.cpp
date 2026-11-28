@@ -241,6 +241,7 @@ void RenderAhead::fill_stats(Stats& s) const
     s.work_width = p.work_width, s.work_height = p.work_height;
     s.upscaler_active = p.upscaler_active, s.frame_gen_active = p.frame_gen_active;
     s.upscaler_note = p.upscaler_note, s.frame_gen_note = p.frame_gen_note;
+    s.upscaler_mode = p.upscaler_mode;
     s.cleanup_active = p.cleanup_active, s.cleanup_note = p.cleanup_note;
     s.source_frames = p.source_frames, s.skipped_frames = p.skipped_frames;
     s.generated_frames = p.generated_frames, s.scene_cuts = p.scene_cuts;

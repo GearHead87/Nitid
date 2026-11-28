@@ -207,6 +207,11 @@ void test_settings()
     CHECK(parse_upscaling("ultra", s) && s.upscaler == Upscaler::VfxSuperRes && upscaling_name(s) == "VSR ultra");
     CHECK(parse_upscaling("off", s) && upscaling_name(s) == "off");
     CHECK(!parse_upscaling("lanczos", s));
+    CHECK(parse_upscaling("dlss", s) && s.upscaler == Upscaler::Dlss && s.dlss_preset == DlssPreset::Auto &&
+          upscaling_name(s) == "DLSS");
+    CHECK(parse_upscaling("dlss-k", s) && s.dlss_preset == DlssPreset::K && upscaling_name(s) == "DLSS preset K");
+    CHECK(parse_upscaling("dlss-m", s) && s.dlss_preset == DlssPreset::M);
+    CHECK(!parse_upscaling("dlss-x", s) && !parse_upscaling("dlssk", s) && !parse_upscaling("dlss-", s));
     CHECK(parse_frame_gen("high", s) && s.frame_gen == FrameGen::VfxFrameGen && s.frame_gen_quality == FrameGenQuality::High);
     CHECK(!parse_frame_gen("x", s));
     CHECK(parse_cleanup("denoise", s) && s.cleanup == Cleanup::Denoise);

@@ -78,7 +78,7 @@ struct Engine::Impl {
         auto cap = std::make_unique<input::PipeWireCapture>(std::move(connect), *vk, *cuda, *kernels);
         capture = cap.get();
         source = std::move(cap);
-        pipe = std::make_unique<pipeline::Pipeline>(*cuda, vfx, caps.super_res, caps.frame_gen);
+        pipe = std::make_unique<pipeline::Pipeline>(*cuda, vfx, caps.super_res, caps.frame_gen, gpu_extras());
         pipe->set_source(source.get());
         info = source->info();
         info.live = true;
@@ -89,6 +89,15 @@ struct Engine::Impl {
         last_live.reset();
         self.reset_stats();
         return info;
+    }
+
+    pipeline::GpuExtras gpu_extras() const
+    {
+        pipeline::GpuExtras g;
+        g.vk = vk.get();
+        g.dlss = dlss && dlss->started() ? dlss.get() : nullptr;
+        g.dlss_note = caps.dlss_error;
+        return g;
     }
 
     void ensure_device(VkSurfaceKHR surface)
@@ -211,7 +220,7 @@ SourceInfo Engine::open_file(const std::string& path, const OpenOptions& options
     auto file = std::make_unique<input::FfmpegFileSource>(path, options, int(m.cuda->device), &gd);
     file->set_scene_cut_detection(m.settings.scene_cut_detection);
     m.source = std::move(file);
-    m.pipe = std::make_unique<pipeline::Pipeline>(*m.cuda, m.vfx, m.caps.super_res, m.caps.frame_gen);
+    m.pipe = std::make_unique<pipeline::Pipeline>(*m.cuda, m.vfx, m.caps.super_res, m.caps.frame_gen, m.gpu_extras());
     m.pipe->set_source(m.source.get());
     m.clock.reset();
     m.headless_n = 0;

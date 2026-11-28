@@ -14,7 +14,12 @@ enum class Upscaler : std::uint8_t {
     VfxSuperRes,  // NVIDIA VFX Video Super Resolution (AI; RTX GPUs with the VFX runtime)
     Fsr1,         // AMD FidelityFX FSR 1 (EASU + RCAS sharpening): spatial, any NVIDIA GPU
     Nis,          // NVIDIA Image Scaling: spatial, up to 2x (larger windows: the rest is a plain blit)
+    Dlss,         // NVIDIA DLSS Super Resolution (AI, temporal; RTX GPUs with the DLSS runtime), up to 3x; at the
+                  // video's own size it runs as DLAA (anti-aliasing / temporal clean-up)
 };
+
+// DLSS model. Auto = NVIDIA's default for the scale (K up to 1.5x and for DLAA, M around 2x, L at 3x).
+enum class DlssPreset : std::uint8_t { Auto = 0, J = 10, K = 11, L = 12, M = 13 };
 
 // VFX Video Super Resolution quality levels (values match the SDK's QualityLevel).
 enum class SuperResQuality : std::uint8_t { Bicubic = 0, Low = 1, Medium = 2, High = 3, Ultra = 4 };
@@ -48,6 +53,7 @@ struct Settings {
     SuperResQuality super_res_quality = SuperResQuality::High;
     // FSR 1 / NIS sharpening, 0 (none) to 1 (strongest).
     float sharpness = 0.5f;
+    DlssPreset dlss_preset = DlssPreset::Auto;
     // Clean-up when the video is shown at its own size (needs the VFX runtime). Strength: low..ultra.
     Cleanup cleanup = Cleanup::Off;
     SuperResQuality cleanup_strength = SuperResQuality::Medium;  // Low..Ultra (Bicubic is treated as Low)
@@ -78,12 +84,14 @@ NITID_EXPORT std::string_view to_string(FrameGen) noexcept;
 NITID_EXPORT std::string_view to_string(Cleanup) noexcept;
 NITID_EXPORT std::string_view to_string(LiveMode) noexcept;
 NITID_EXPORT std::string_view to_string(FrameGenQuality) noexcept;
+NITID_EXPORT std::string_view to_string(DlssPreset) noexcept;
 
-// Short description of the chosen upscaler, e.g. "VSR high", "FSR 1", "NIS", "off".
+// Short description of the chosen upscaler, e.g. "VSR high", "FSR 1", "NIS", "DLSS", "DLSS preset K", "off".
 NITID_EXPORT std::string upscaling_name(const Settings& s);
 
 // Parse the names apps use on the command line and in presets.
-//   upscaling:        "off", "fsr", "nis", or VSR quality "bicubic", "low", "medium", "high", "ultra"
+//   upscaling:        "off", "fsr", "nis", "dlss" (or "dlss-j", "dlss-k", "dlss-l", "dlss-m" for a preset),
+//                     or VSR quality "bicubic", "low", "medium", "high", "ultra"
 //   frame generation: "off", "low", "medium", "high"
 // Sets both the on/off choice and the quality in `s`. Returns false if the name is unknown.
 NITID_EXPORT bool parse_upscaling(std::string_view name, Settings& s) noexcept;

@@ -22,8 +22,9 @@ int main(int argc, char** argv)
     CLI::App cli{"Nitid: AI upscaling and frame generation for video (NVIDIA RTX, Linux)", "nitid"};
     cli.set_version_flag("--version", std::string(nitid::version()));
     cli.add_option("file", o.file, "Video file to play (or open one from the window, or --capture-screen)")->check(CLI::ExistingFile);
-    cli.add_option("--upscale", upscale, "Upscaling: VSR (AI) quality low, medium, high, ultra; fsr; nis; off")
-        ->check(CLI::IsMember({"off", "low", "medium", "high", "ultra", "fsr", "nis"}))
+    cli.add_option("--upscale", upscale,
+                   "Upscaling: VSR (AI) quality low, medium, high, ultra; dlss (or dlss-j/k/l/m for a DLSS preset); fsr; nis; off")
+        ->check(CLI::IsMember({"off", "low", "medium", "high", "ultra", "dlss", "dlss-j", "dlss-k", "dlss-l", "dlss-m", "fsr", "nis"}))
         ->capture_default_str();
     cli.add_option("--frame-gen", frame_gen, "Frame generation: off, low, medium, high")
         ->check(CLI::IsMember({"off", "low", "medium", "high"}))

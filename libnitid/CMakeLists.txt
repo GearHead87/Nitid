@@ -115,6 +115,7 @@ add_library(libnitid
   src/gpu/vk_resources.cpp     # images / command buffers for the pipeline thread's Vulkan work
   # dlss: the optional DLSS module (loaded at run time) and what uses it
   src/dlss/runtime.cpp
+  src/dlss/super_res.cpp       # DLSS Super Resolution on video frames
   # input: frame sources (files now; screen capture and capture cards later)
   src/input/ffmpeg_file_source.cpp
   src/input/scene_cut.cpp

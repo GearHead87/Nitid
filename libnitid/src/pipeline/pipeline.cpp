@@ -9,8 +9,8 @@
 
 namespace nitid::pipeline {
 
-Pipeline::Pipeline(gpu::CudaContext& cuda, std::shared_ptr<const vfx::Api> vfx, bool can_sr, bool can_fg)
-    : cuda_(cuda), vfx_(std::move(vfx)), can_sr_(can_sr), can_fg_(can_fg)
+Pipeline::Pipeline(gpu::CudaContext& cuda, std::shared_ptr<const vfx::Api> vfx, bool can_sr, bool can_fg, GpuExtras extras)
+    : cuda_(cuda), vfx_(std::move(vfx)), can_sr_(can_sr), can_fg_(can_fg), gx_(std::move(extras))
 {
     if (vfx_) {
         sr_ = std::make_unique<vfx::SuperRes>(vfx_, cuda_.stream);
@@ -19,7 +19,11 @@ Pipeline::Pipeline(gpu::CudaContext& cuda, std::shared_ptr<const vfx::Api> vfx, 
     spatial_ = std::make_unique<gpu::SpatialScaler>();
 }
 
-Pipeline::~Pipeline() { cuda_.sync(); }
+Pipeline::~Pipeline()
+{
+    cuda_.sync();
+    dlss_sr_.reset();  // before the Vulkan device / DLSS runtime go
+}
 
 template <class F> void Pipeline::timed(RunningAverage& avg, F&& fn)
 {
@@ -45,6 +49,7 @@ void Pipeline::restart()
     cur_ = 0, next_ = 1;
     ended_ = false;
     pending_cut_ = false;
+    dlss_reset_ = true;
 }
 
 void Pipeline::allocate_ring()
@@ -71,13 +76,19 @@ void Pipeline::configure(Size box, const Settings& settings)
     box_ = box;
     settings_ = settings;
 
-    // Upscaler: active only if wanted, available, and the frame actually gets bigger.
+    // Upscaler: active only if wanted, available, and the frame actually gets bigger (DLSS: or at the same size, as
+    // DLAA).
     const bool spatial = settings.upscaler == Upscaler::Fsr1 || settings.upscaler == Upscaler::Nis;
-    const double max_scale = settings.upscaler == Upscaler::Nis ? gpu::SpatialScaler::kNisMaxScale : 4.0;
+    const bool dlss = settings.upscaler == Upscaler::Dlss;
+    const double max_scale = settings.upscaler == Upscaler::Nis ? gpu::SpatialScaler::kNisMaxScale : dlss ? 3.0 : 4.0;
     Size target = upscale_target(src_, box, max_scale);
     up_ = Up::None;
     sr_note_.clear();
+    const bool dlss_ok = gx_.dlss && gx_.vk && gx_.dlss->caps().super_res;
     if (settings.upscaler == Upscaler::Off) sr_note_ = "off";
+    else if (dlss && !dlss_ok) sr_note_ = gx_.dlss_note.empty() ? "DLSS not available" : gx_.dlss_note;
+    else if (dlss && dlss_failed_) sr_note_ = "DLSS failed to start (see log)";
+    else if (dlss) up_ = Up::Dlss;
     else if (target == src_) sr_note_ = "no upscale needed (window not larger than the video)";
     else if (spatial && !spatial_->available()) sr_note_ = "FSR / NIS kernels not in this build";
     else if (spatial) up_ = Up::Spatial;
@@ -90,7 +101,8 @@ void Pipeline::configure(Size box, const Settings& settings)
     cleanup_note_.clear();
     unsigned vsr_mode = unsigned(settings.super_res_quality);
     if (settings.cleanup != Cleanup::Off) {
-        if (sr_active_) cleanup_note_ = "the video is being upscaled (upscaling cleans up too)";
+        if (up_ == Up::Dlss && target == src_) cleanup_note_ = "DLSS runs as DLAA at this size";
+        else if (sr_active_) cleanup_note_ = "the video is being upscaled (upscaling cleans up too)";
         else if (!can_sr_) cleanup_note_ = "VFX runtime not available";
         else if (sr_failed_) cleanup_note_ = "failed to load (see log)";
         else {
@@ -133,6 +145,21 @@ void Pipeline::configure(Size box, const Settings& settings)
     } else if (sr_ && sr_->configured()) {
         sr_->reset();  // free the model's memory
     }
+    if (up_ == Up::Dlss) {
+        try {
+            if (!dlss_sr_) dlss_sr_ = std::make_unique<dlss::SuperRes>(*gx_.vk, cuda_, *gx_.dlss);
+            dlss_sr_->configure(src_.w, src_.h, work_.w, work_.h, int(settings.dlss_preset));
+            dlss_reset_ = true;
+        } catch (const Error& e) {
+            log::error("{}", e.what());
+            dlss_failed_ = true;
+            box_ = {};  // reconfigure without DLSS
+            configure(box, settings);
+            return;
+        }
+    } else if (dlss_sr_ && dlss_sr_->configured()) {
+        dlss_sr_->reset();
+    }
     if (up_ == Up::Spatial)
         spatial_->configure(settings.upscaler == Upscaler::Nis ? gpu::SpatialKind::Nis : gpu::SpatialKind::Fsr1, src_.w,
                             src_.h, work_.w, work_.h, settings.sharpness);
@@ -159,7 +186,7 @@ void Pipeline::configure(Size box, const Settings& settings)
               fg_active_ ? "on" : fg_note_);
 }
 
-void Pipeline::upload(input::DecodedFrame& f, Slot& dst)
+void Pipeline::upload(input::DecodedFrame& f, Slot& dst, bool cut)
 {
     const size_t bytes = size_t(f.width) * f.height * 4;
     // GPU frames: a device copy (~0.02 ms at 1080p). CPU frames: an upload.
@@ -177,6 +204,13 @@ void Pipeline::upload(input::DecodedFrame& f, Slot& dst)
             sr_->run();
             NITID_CU(cuMemcpyDtoDAsync(dst.buf.ptr(), sr_->output(), size_t(work_.w) * work_.h * 4, cuda_.stream));
         });
+    } else if (up_ == Up::Dlss) {
+        timed(upload_ms_, [&] { copy_in(dlss_sr_->input()); });
+        timed(upscale_ms_, [&] {
+            dlss_sr_->run(dlss_reset_ || cut);  // a new shot: don't carry detail over from the old one
+            NITID_CU(cuMemcpyDtoDAsync(dst.buf.ptr(), dlss_sr_->output(), size_t(work_.w) * work_.h * 4, cuda_.stream));
+        });
+        dlss_reset_ = false;
     } else if (up_ == Up::Spatial) {
         // GPU frames are read in place; CPU frames are uploaded first.
         CUdeviceptr in = f.gpu_rgba.ptr();
@@ -207,7 +241,7 @@ bool Pipeline::fetch_next(int64_t min_index)
         }
         pending_cut_ = false;
         Slot& dst = slots_[next_];
-        upload(*f, dst);
+        upload(*f, dst, cut);
         dst.index = f->index;
         dst.scene_cut = cut;
         source_->recycle(std::move(*f));
@@ -288,7 +322,7 @@ std::optional<Output> Pipeline::produce_live(bool interpolate, double target)
         if (work_.w) {
             if (slots_[next_].valid()) std::swap(cur_, next_);  // next becomes the previous frame
             Slot& dst = slots_[next_];
-            upload(*f, dst);
+            upload(*f, dst, false);
             dst.index = f->index;
             dst.arrival = f->arrival_s;
             dst.scene_cut = false;
@@ -326,6 +360,7 @@ void Pipeline::fill_stats(Stats& s) const
     s.upscaler_active = sr_active_;
     s.frame_gen_active = fg_active_;
     s.upscaler_note = sr_note_;
+    s.upscaler_mode = up_ == Up::Dlss && dlss_sr_ ? dlss_sr_->mode() : std::string();
     s.cleanup_active = cleanup_active_;
     s.cleanup_note = cleanup_note_;
     s.frame_gen_note = fg_note_;

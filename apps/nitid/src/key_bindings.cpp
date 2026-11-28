@@ -22,7 +22,7 @@ constexpr std::array kBindings = {
     KeyBinding{SDLK_PERIOD, Action::AudioLater, "", ""},
     KeyBinding{SDLK_F11, Action::ToggleFullscreen, "F11 / F", "fullscreen"},
     KeyBinding{SDLK_F, Action::ToggleFullscreen, "", ""},
-    KeyBinding{SDLK_V, Action::CycleUpscaler, "V", "upscaler: VSR (AI) / FSR 1 / NIS / off"},
+    KeyBinding{SDLK_V, Action::CycleUpscaler, "V", "upscaler: VSR (AI) / DLSS (AI) / FSR 1 / NIS / off"},
     KeyBinding{SDLK_B, Action::CycleUpscalerQuality, "B", "VSR quality: low / medium / high / ultra"},
     KeyBinding{SDLK_G, Action::ToggleFrameGen, "G", "frame generation on / off"},
     KeyBinding{SDLK_H, Action::CycleFrameGenQuality, "H", "frame gen quality: low / medium / high"},

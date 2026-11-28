@@ -353,12 +353,17 @@ void App::handle(Action a)
         case Action::ToggleMute: engine_->set_muted(!engine_->muted()); break;
         case Action::AudioEarlier: engine_->set_audio_delay(engine_->audio_delay() - 0.010); break;
         case Action::AudioLater: engine_->set_audio_delay(engine_->audio_delay() + 0.010); break;
-        case Action::CycleUpscaler:
-            settings_.upscaler = settings_.upscaler == Upscaler::VfxSuperRes ? Upscaler::Fsr1
-                                 : settings_.upscaler == Upscaler::Fsr1      ? Upscaler::Nis
-                                 : settings_.upscaler == Upscaler::Nis       ? Upscaler::Off
-                                                                             : Upscaler::VfxSuperRes;
+        case Action::CycleUpscaler: {
+            // VSR -> DLSS (when available) -> FSR 1 -> NIS -> off
+            const bool dlss = engine_->capabilities().dlss_super_res;
+            auto u = settings_.upscaler;
+            settings_.upscaler = u == Upscaler::VfxSuperRes ? (dlss ? Upscaler::Dlss : Upscaler::Fsr1)
+                                 : u == Upscaler::Dlss      ? Upscaler::Fsr1
+                                 : u == Upscaler::Fsr1      ? Upscaler::Nis
+                                 : u == Upscaler::Nis       ? Upscaler::Off
+                                                            : Upscaler::VfxSuperRes;
             break;
+        }
         case Action::CycleUpscalerQuality: {
             int q = int(settings_.super_res_quality) + 1;
             settings_.super_res_quality = SuperResQuality(q > int(SuperResQuality::Ultra) ? int(SuperResQuality::Low) : q);

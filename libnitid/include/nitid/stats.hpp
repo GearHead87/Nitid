@@ -27,6 +27,7 @@ struct Stats {
     bool upscaler_active = false;
     bool frame_gen_active = false;
     std::string upscaler_note;    // why the upscaler is inactive, if it is
+    std::string upscaler_mode;    // DLSS: "DLAA", "Quality 1.50x", "Performance 2.00x", ...
     std::string frame_gen_note;   // why frame gen is inactive, if it is
     bool cleanup_active = false;  // VFX denoise / deblur at the video's own size (instead of upscaling)
     std::string cleanup_note;     // why clean-up is inactive, if it was asked for
