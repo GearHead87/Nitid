@@ -31,4 +31,6 @@ check "$stage/bin/nitid-cli" --version
 check "$stage/bin/nitid" --version
 "${env[@]}" "$stage/bin/nitid" --help > /dev/null
 "${env[@]}" "$stage/bin/nitid-setup-vfx" --help > /dev/null
+"${env[@]}" "$stage/bin/nitid-setup-dlss" --help > /dev/null
+[ -f "$stage/lib/libnitid-dlss.so" ] || { echo "FAILED: lib/libnitid-dlss.so missing"; exit 1; }
 echo "smoke test passed"

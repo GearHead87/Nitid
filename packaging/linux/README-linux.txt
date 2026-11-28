@@ -15,6 +15,8 @@ Start
   1. Extract this folder anywhere, e.g.  tar -xzf nitid-*-linux-x86_64.tar.gz
   2. Install NVIDIA's VFX runtime once (about 450 MB download, NVIDIA's license):
        ./bin/nitid-setup-vfx
+     Optional, for DLSS upscaling and DLSS frame generation (67 MB, NVIDIA's license):
+       ./bin/nitid-setup-dlss
   3. Check what Nitid sees:
        ./bin/nitid-cli info
   4. Play a video:
@@ -23,13 +25,14 @@ Start
        ./bin/nitid --capture-screen
 
 In the player, move the mouse for the controls (seek bar, volume, Settings and Stats panels); F1 lists the keys.
-Space pause, Left/Right seek, Up/Down volume, M mute, V upscaler (VSR / FSR 1 / NIS / off), G frame gen,
+Space pause, Left/Right seek, Up/Down volume, M mute, V upscaler (VSR / DLSS / FSR 1 / NIS / off), G frame gen,
+D frame gen VFX / DLSS, 0 2 3 4 6 frames per source frame,
 X compare original | Nitid, L live mode, P settings, I stats, Tab hide controls, F or double-click fullscreen, Esc quit.
 All options: ./bin/nitid --help   and   ./bin/nitid-cli --help
 
 Files
-  bin/            nitid (player), nitid-cli (info, bench), nitid-setup-vfx
-  lib/            libnitid and the bundled FFmpeg and SDL3 libraries
+  bin/            nitid (player), nitid-cli (info, bench), nitid-setup-vfx, nitid-setup-dlss
+  lib/            libnitid, its DLSS module (libnitid-dlss.so) and the bundled FFmpeg and SDL3 libraries
   share/doc/nitid CHANGELOG.md, README.md, THIRD-PARTY-NOTICES.md, licenses/
 
 Source, issues and releases: https://github.com/GearHead87/Nitid

@@ -33,7 +33,8 @@ cd "$(dirname "$0")/.."
 1. Download \`nitid-$version-linux-x86_64.tar.gz\` below and extract it anywhere:
    \`tar -xzf nitid-$version-linux-x86_64.tar.gz\`
 2. Install NVIDIA's VFX runtime once (AI upscaling and frame generation; about 450 MB from NVIDIA, under
-   NVIDIA's license): \`nitid-$version-linux-x86_64/bin/nitid-setup-vfx\`
+   NVIDIA's license): \`nitid-$version-linux-x86_64/bin/nitid-setup-vfx\`. Optional, for DLSS upscaling and
+   DLSS frame generation (67 MB, NVIDIA's license): \`bin/nitid-setup-dlss\`
 3. Play a video: \`nitid-$version-linux-x86_64/bin/nitid video.mp4\` (\`bin/nitid-cli info\` shows what Nitid sees)
 
 Needs an NVIDIA RTX GPU with the proprietary driver, the Vulkan loader, and glibc 2.38+ (Ubuntu 24.04+,

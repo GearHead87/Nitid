@@ -47,6 +47,22 @@ if [ -z "$vfx_inc" ]; then
   vfx_inc="$maxine/nvvfx/include"
 fi
 
+# --- NVIDIA DLSS SDK (headers + static NGX loader) for the DLSS module, pinned commit -----------------------
+dlss_sdk="${NITID_DLSS_SDK_DIR:-}"
+if [ -z "$dlss_sdk" ]; then
+  dlss_sdk="$work/DLSS"
+  if [ "$(git -C "$dlss_sdk" rev-parse HEAD 2>/dev/null)" != "$DLSS_SDK_COMMIT" ]; then
+    rm -rf "$dlss_sdk"
+    git init -q "$dlss_sdk"
+    git -C "$dlss_sdk" remote add origin https://github.com/NVIDIA/DLSS.git
+    git -C "$dlss_sdk" sparse-checkout set --no-cone /include/ /lib/Linux_x86_64/libnvsdk_ngx.a /LICENSE.txt
+    git -C "$dlss_sdk" fetch -q --depth 1 --filter=blob:none origin "$DLSS_SDK_COMMIT"
+    git -C "$dlss_sdk" checkout -q FETCH_HEAD
+  fi
+  echo "$DLSS_NGX_LIB_SHA256  $dlss_sdk/lib/Linux_x86_64/libnvsdk_ngx.a" | sha256sum -c --quiet - \
+    || { echo "DLSS SDK: libnvsdk_ngx.a checksum mismatch" >&2; exit 1; }
+fi
+
 # --- build + unit tests -------------------------------------------------------------------------------------
 # The build machine has no NVIDIA driver, only CUDA's link stub (libcuda.so). Linking the programs checks the
 # libraries libnitid needs too, so point the linker at a libcuda.so.1 made from the stub, and at $deps/lib for
@@ -61,8 +77,10 @@ PKG_CONFIG_PATH="$deps/lib/pkgconfig" cmake -S "$repo" -B "$build" -G Ninja \
   -DCMAKE_PREFIX_PATH="$deps" \
   -DCMAKE_INSTALL_PREFIX="$stage" -DCMAKE_INSTALL_LIBDIR=lib \
   -DNITID_VFX_INCLUDE_DIR="$vfx_inc" -DNITID_VFX_RUNTIME_DIR= \
+  -DNITID_DLSS_SDK_DIR="$dlss_sdk" -DNITID_DLSS_SDK_VERSION="$DLSS_SDK_VERSION" -DNITID_DLSS_RUNTIME_DIR= \
   -DNITID_BUILD_TESTS=ON
 cmake --build "$build"
+[ -f "$build/libnitid/libnitid-dlss.so" ] || { echo "the DLSS module was not built" >&2; exit 1; }
 ctest --test-dir "$build" --output-on-failure
 
 # --- install into the tarball folder --------------------------------------------------------------------
@@ -91,6 +109,7 @@ for elf in "$stage"/bin/* "$stage"/lib/libnitid.so.*; do
 done
 
 install -m 0755 "$here/nitid-setup-vfx" "$stage/bin/nitid-setup-vfx"
+install -m 0755 "$here/nitid-setup-dlss" "$stage/bin/nitid-setup-dlss"
 doc="$stage/share/doc/nitid"
 mkdir -p "$doc/licenses"
 cp "$repo/README.md" "$repo/CHANGELOG.md" "$here/THIRD-PARTY-NOTICES.md" "$doc/"
@@ -98,6 +117,8 @@ cp "$repo/README.md" "$repo/CHANGELOG.md" "$here/THIRD-PARTY-NOTICES.md" "$doc/"
 cp -r "$deps/share/licenses/." "$doc/licenses/"
 mkdir -p "$doc/licenses/Maxine-VFX-SDK"
 cp "$(dirname "$(dirname "$vfx_inc")")/LICENSE"* "$doc/licenses/Maxine-VFX-SDK/" 2>/dev/null || true
+mkdir -p "$doc/licenses/DLSS-SDK"   # lib/libnitid-dlss.so contains NVIDIA's NGX loader (libnvsdk_ngx.a)
+cp "$dlss_sdk/LICENSE.txt" "$doc/licenses/DLSS-SDK/LICENSE.txt"
 install -m 0644 "$here/README-linux.txt" "$stage/README.txt"
 
 # --- checks -----------------------------------------------------------------------------------------------

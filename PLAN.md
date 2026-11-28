@@ -16,7 +16,8 @@ shader logic, and runs on NVIDIA's Linux SDKs.
 | Nitid 0.2 (Phase 1 rest) | ✅ Done (2026-11-26): FSR 1 / NIS, frame-exact seeking, sound with A/V sync (PipeWire), on-screen controls (ImGui). Tests: [tests/v0.2/README.md](tests/v0.2/README.md). |
 | Nitid 0.3 (Phase 2 rest) | ✅ Done (2026-11-26): render-ahead worker with frame-gen pacing (HIGH smooth at 165 Hz), compare view, optional VFX clean-up. TrueHDR waits for HDR output. Tests: [tests/v0.3/README.md](tests/v0.3/README.md). |
 | Nitid 0.4 (Phase 3) | ✅ Done (2026-11-27): live input from PipeWire, screen capture through the portal (DMA-BUF, 165 fps, 22 ms capture → screen), low-latency and smooth live modes. Capture card skipped (no device). Tests: [tests/v0.4/README.md](tests/v0.4/README.md). |
-| Phase 4: Veyra-style DLSS | ⏭️ Next (not started): optical flow, DLSS SR / DLSS-G on video. |
+| Nitid 0.5 (Phase 4) | ✅ Done (2026-11-28): DLSS Super Resolution (presets, DLAA, up to 3x) and DLSS Frame Generation (full / lite, 2x–6x) natively, motion vectors from hardware optical flow, DLSS code in a separate module (`libnitid-dlss.so`), `nitid-setup-dlss`. On compressed video both stay below VSR / VFX in quality; DLSS-G lite is the cheap high-multiplier option. The shader optical-flow fallback was dropped (every DLSS-capable GPU has the flow engine). DLSS 5 (neural rendering) is not available on Linux (spike S10). Tests: [tests/v0.5/README.md](tests/v0.5/README.md). |
+| Phase 5: output and polish | ⏭️ Next (not started) |
 
 ## Phase 0 findings (what changed in the plan)
 

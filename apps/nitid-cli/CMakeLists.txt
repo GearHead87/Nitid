@@ -6,12 +6,12 @@
 
 cmake_minimum_required(VERSION 3.25)
 
-project(nitid-cli VERSION 0.4.0 LANGUAGES CXX)
+project(nitid-cli VERSION 0.5.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 
 if(NOT TARGET nitid::nitid)
-  find_package(libnitid 0.4 CONFIG REQUIRED)
+  find_package(libnitid 0.5 CONFIG REQUIRED)
 endif()
 
 find_package(CLI11 REQUIRED CONFIG)

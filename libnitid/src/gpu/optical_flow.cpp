@@ -13,7 +13,9 @@ PFN_vkBindOpticalFlowSessionImageNV p_bind;
 PFN_vkCmdOpticalFlowExecuteNV p_exec;
 
 constexpr VkFormat kLuma = VK_FORMAT_R8_UNORM;
-constexpr VkFormat kFlow = VK_FORMAT_R16G16_SFIXED5_NV;  // S10.5 fixed point: value / 32 = pixels (S4)
+// S10.5 fixed point: value / 32 = pixels (S4). The old name: newer headers call it VK_FORMAT_R16G16_SFIXED5_NV,
+// Ubuntu 24.04's only know this one.
+constexpr VkFormat kFlow = VK_FORMAT_R16G16_S10_5_NV;
 
 } // namespace
 

@@ -8,6 +8,40 @@ release workflow puts that section at the top of the GitHub release, followed by
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-28
+
+NVIDIA DLSS on video, natively on Linux: DLSS upscaling and DLSS frame generation (up to 6x) next to the VFX ones.
+Test results: [tests/v0.5](https://github.com/GearHead87/Nitid/blob/main/tests/v0.5/README.md).
+
+### Added
+- **DLSS Super Resolution** as a fourth upscaler (`--upscale dlss`, or `dlss-j/k/l/m` for a preset; `V` cycles
+  VSR → DLSS → FSR 1 → NIS → off). Up to 3x; at the video's own size it runs as DLAA. Motion vectors come from the
+  GPU's optical flow engine; the history is reset at scene cuts and seeks. Auto preset: M when upscaling, K for
+  DLAA (the best on video in the tests). 0.7–0.9 ms per frame to 1080p plus ~0.5 ms optical flow.
+- **DLSS Frame Generation** (`--frame-gen dlss` or `dlss-lite`; `D` switches VFX ↔ DLSS, `H` full ↔ lite, `6` for
+  6x): 2x–6x on RTX 50 (2x on RTX 40), in files, windows and live smooth mode. "Per refresh" picks the whole step
+  closest to the display (24 fps at 165 Hz: 6x). Lite mode uses optical flow and costs 0.3 ms per generated
+  1080p frame at 6x.
+- **Hardware optical flow** (`VK_NV_optical_flow`) for DLSS's motion vectors.
+- `nitid-setup-dlss`: downloads NVIDIA's DLSS runtime (67 MB, from NVIDIA's DLSS SDK on GitHub, SHA-256 checked)
+  into `~/.local/share/nitid/dlss`. `nitid-cli info` shows DLSS and optical flow availability.
+
+### Changed
+- The DLSS code lives in its own module, `lib/libnitid-dlss.so`, which libnitid loads at run time (NVIDIA's SDK
+  license must not mix with an open-source license). Without it, or without the runtime, DLSS is simply unavailable.
+- Engine API: `Upscaler::Dlss`, `DlssPreset`, `FrameGen::DlssFrameGen`, `DlssFrameGenMode`, `frame_gen_name()`;
+  `Capabilities` gained `dlss_*` and `optical_flow`; `Stats` gained `upscaler_mode`, `frame_gen_multiplier`,
+  `frame_gen_max_multiplier` and `avg.motion_ms`.
+- The Vulkan device enables NGX's extensions, buffer device address, optical flow and a third queue (pipeline
+  thread). Headless engines create the device in `Engine::create()`.
+
+### Known limits
+- **On compressed video DLSS is not better than VSR / VFX.** DLSS upscaling (best: preset M with motion vectors)
+  scores about bicubic, 1.5–2.7 dB below VSR HIGH; DLAA softens rather than cleans up. DLSS frame generation is
+  0.2–1.4 dB (full) / 0.6–2.8 dB (lite) below VFX MEDIUM. VSR and VFX frame generation stay the defaults; DLSS is
+  for speed (high multipliers, 4K) and up to 3x upscaling.
+- DLSS 5 (neural rendering) is not available on Linux: NVIDIA ships no Linux library for it (tools/spikes/S10).
+
 ## [0.4.0] - 2026-11-26
 
 ### Added
@@ -126,7 +160,8 @@ display, on Linux. Test results: [tests/v0.1](https://github.com/GearHead87/Niti
 - No audio, no seeking, no on-screen menu and no HDR output yet.
 - Needs an NVIDIA RTX GPU; frame generation needs RTX 40 or 50.
 
-[Unreleased]: https://github.com/GearHead87/Nitid/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/GearHead87/Nitid/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/GearHead87/Nitid/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/GearHead87/Nitid/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/GearHead87/Nitid/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/GearHead87/Nitid/compare/v0.1.0...v0.2.0

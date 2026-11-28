@@ -39,7 +39,9 @@ Built by [packaging/linux/build-release.sh](../packaging/linux/build-release.sh)
 nitid-X.Y.Z-linux-x86_64/
   bin/nitid, bin/nitid-cli      programs (RPATH $ORIGIN/../lib)
   bin/nitid-setup-vfx           installs NVIDIA's VFX runtime for this user
+  bin/nitid-setup-dlss          installs NVIDIA's DLSS runtime for this user
   lib/libnitid.so.0             engine
+  lib/libnitid-dlss.so          DLSS module (NVIDIA's DLSS SDK code; loaded at run time)
   lib/libav*.so, libsw*.so      FFmpeg 9.1, LGPL, NVDEC on, decoding only (packaging/linux/build-deps.sh)
   lib/libSDL3.so.0              SDL 3
   README.txt
@@ -55,6 +57,12 @@ nitid-X.Y.Z-linux-x86_64/
   into `~/.local/share/nitid/vfx` (keeping the wheel's layout, which its libraries' RPATH expects). libnitid
   looks there automatically (search order: `$NITID_VFX_DIR`, `$XDG_DATA_HOME/nitid/vfx/nvvfx/libs`,
   `<libnitid dir>/nitid/vfx/nvvfx/libs`, the developer path from the build).
+- **Not shipped: the NVIDIA DLSS runtime** (`libnvidia-ngx-dlss.so`, `-dlssg.so` 310.9.16, 67 MB).
+  `nitid-setup-dlss` downloads them from NVIDIA's DLSS SDK repository on GitHub (pinned tag, SHA-256 checked) into
+  `~/.local/share/nitid/dlss`. The DLSS module itself is shipped: it contains NVIDIA's small NGX loader
+  (`libnvsdk_ngx.a`), which the NVIDIA RTX SDKs license allows inside an application (license in
+  `share/doc/nitid/licenses/DLSS-SDK`). It is a separate file because that license must not be combined with an
+  open-source license.
 - **Build:** CUDA 12.9 `nvcc` for the PTX kernel (only nvcc and the driver API headers + link stub are
   installed), GCC 14, the NVIDIA VFX SDK C headers from a pinned Maxine-VFX-SDK commit.
 
@@ -76,6 +84,8 @@ packaging/linux/docker-build.sh [output dir]     # default out/
 
 - FFmpeg / SDL3 / CLI11 / nv-codec-headers: change the version and SHA-256 in `versions.env`. The deps cache
   key changes with it.
+- DLSS SDK: `DLSS_SDK_VERSION`, `DLSS_SDK_COMMIT` and `DLSS_NGX_LIB_SHA256` in `versions.env`, and the runtime
+  files and hashes in [nitid-setup-dlss](../packaging/linux/nitid-setup-dlss).
 - VFX runtime: change `VFX_VERSION`, `WHEEL` and `SHA256` in
   [nitid-setup-vfx](../packaging/linux/nitid-setup-vfx). The hash is on `https://pypi.nvidia.com/nvidia-vfx/`.
 - CUDA: `CUDA_VERSION` in install-build-deps.sh.

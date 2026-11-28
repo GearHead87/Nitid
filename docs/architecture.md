@@ -1,4 +1,4 @@
-# Nitid architecture (0.4)
+# Nitid architecture (0.5)
 
 How the code is organised, how a frame moves through it, and where each planned feature plugs in.
 For the overall plan see [PLAN.md](../PLAN.md); for build steps see [building.md](building.md).
@@ -8,6 +8,7 @@ For the overall plan see [PLAN.md](../PLAN.md); for build steps see [building.md
 | Component | What it is | Depends on |
 |---|---|---|
 | `libnitid/` | The engine: `libnitid.so` + CMake package `libnitid` (target `nitid::nitid`) | Vulkan, CUDA driver API, FFmpeg, VFX SDK headers (runtime loaded at run time) |
+| `libnitid/dlss-module/` | `libnitid-dlss.so`: all DLSS SDK (NGX) code, loaded by libnitid at run time through the C table `src/dlss/plugin_api.h` | DLSS SDK headers + `libnvsdk_ngx.a` (NVIDIA's license, kept out of libnitid) |
 | `apps/nitid/` | GUI player (`nitid`) | libnitid, SDL3, CLI11, Dear ImGui (downloaded at configure time) |
 | `apps/nitid-cli/` | Headless tool (`nitid-cli`) | libnitid, CLI11 |
 
@@ -35,8 +36,9 @@ settings.cpp          to_string / parse helpers
 core/                 log (NITID_LOG=debug), errors, BoundedQueue, RunningAverage
 gpu/                  VulkanContext (NVIDIA GPU picked explicitly, dynamic rendering on), CudaContext (UUID-matched,
                       *blocking* stream), interop (Vulkan buffers/semaphores shared with CUDA), Kernels (embedded
-                      PTX), SpatialScaler (FSR 1 / NIS)
-  kernels/color.cu    NV12/P010 -> RGBA8, luma thumbnail (compiled to PTX by nvcc at build time)
+                      PTX), SpatialScaler (FSR 1 / NIS), vk_resources (images, command buffer + fence for the
+                      pipeline thread's Vulkan work), OpticalFlow (VK_NV_optical_flow -> per-pixel motion vectors)
+  kernels/color.cu    NV12/P010 -> RGBA8, luma thumbnail, luma for optical flow, flow grid -> motion vectors
   kernels/scale.cu    FSR 1 EASU + RCAS, NIS NVScaler (CUDA ports of the MIT shaders)
 audio/                AudioPlayer (own FFmpeg demuxer + decoder thread, PipeWire stream, follows the picture),
                       av_sync.hpp (the resampling controller)
@@ -46,7 +48,11 @@ input/                FrameSource interface (next, recycle, seek; live: try_next
                       PipeWireCapture (live video: DMA-BUF via Vulkan on a second queue, or shared memory; newest
                       frame only); ScreenCastPortal (desktop portal over D-Bus, restore token)
 vfx/                  VFX runtime loader (dlopen), SuperRes (VSR), FrameGen (VFG, Timestep mode)
-pipeline/             Pipeline (upload -> VSR / FSR / NIS or VFX clean-up -> two-frame ring -> frame gen; keeps the
+dlss/                 Runtime (finds + loads libnitid-dlss.so and NVIDIA's DLSS runtime, starts NGX on the device),
+                      SuperRes (DLSS SR: CUDA buffer -> shared buffer -> Vulkan image -> DLSS -> back), FrameGen
+                      (DLSS-G: all frames of a pair in one submission, kept until the pair changes)
+pipeline/             Pipeline (upload -> [optical flow] -> VSR / DLSS / FSR / NIS or VFX clean-up -> two-frame ring
+                      -> VFX or DLSS frame gen; keeps the
                       original next to each frame in compare mode), RenderAhead (window output: the pipeline on its
                       own thread, frames prepared ahead of the display, frame-gen pacing), frame_layout (size maths),
                       frame_clock (display clock, frame/phase selection)
@@ -80,6 +86,10 @@ FFmpeg/NVDEC ─► NV12 (CUDA) ─►     Pipeline::produce(next grid position)
   settings changes are applied by the worker (models load without freezing the window). When frame generation
   costs more than 95 % of a refresh it prepares one frame every `stride` refreshes (tests/v0.3/01).
 - **Headless** (`render_headless`): position = n / multiplier, output copied to the caller's buffer; no worker.
+- **DLSS** (0.5): frames stay CUDA buffers; DLSS stages copy them into buffers shared with Vulkan, run NGX in one
+  submission on the pipeline thread's own Vulkan queue, and copy back (tests/v0.5/02). Motion vectors come from
+  the optical flow queue at the source size (current -> previous, pixels). DLSS-G makes whole steps, so the
+  render-ahead grid is 1/m with m the largest step not above the refresh rate (tests/v0.5/04).
 - **Live input** (screen capture, `open_pipewire`): no render-ahead (a frame can't be prepared before it
   arrives). Each refresh `Pipeline::produce_live` takes the newest captured frame and either shows it (low
   latency) or generates the moment one frame interval ago between the last two (smooth) (tests/v0.4).
@@ -108,6 +118,12 @@ FFmpeg/NVDEC ─► NV12 (CUDA) ─►     Pipeline::produce(next grid position)
 10. **The presenter never waits on the pipeline's stream**: it has its own (highest-priority) CUDA stream; the
     pipeline's stream is lowest priority (tests/v0.3/01).
 11. **Ignore warm-up frames when measuring cost** (decoder start, first model runs: 30–50 ms) (tests/v0.3/01).
+12. **DLSS-G frames of a pair are generated in order, all at once** (NVIDIA's rule: index 1..n per new frame);
+    a seek / skipped pair primes it with the older frame and a reset (tests/v0.5/04).
+13. **DLSS without motion vectors smears video**; with optical flow only preset M improves, and DLAA gets worse
+    with them (tests/v0.5/02, 03). Measure each preset; NVIDIA's defaults are tuned for games.
+14. **Pair frames by number with one time base** in quality scripts (`settb=AVTB,setpts=N*40000`), and average
+    per-frame PSNR for generated frames (held frames at cuts dominate an MSE average) (tests/v0.5/02, 04).
 
 ## Where planned features go
 
@@ -121,7 +137,8 @@ FFmpeg/NVDEC ─► NV12 (CUDA) ─►     Pipeline::produce(next grid position)
 | Screen capture (3) | ✅ 0.4: `input/pipewire_capture.*`, `input/screencast_portal.*` | DMA-BUF → Vulkan → CUDA, 0.33 ms per 1440p frame |
 | Capture card (3) | `input/v4l2_source.*` implementing `FrameSource` | skipped for now (no card) |
 | Low-latency live mode (3) | ✅ 0.4: `Settings::live_mode`, `Pipeline::produce_live` | low latency = newest frame; smooth = frame gen one frame back |
-| DLSS SR / DLSS-G lite + optical flow (4) | `ngx/` + `motion/` modules; new `Upscaler` / `FrameGen` enum values | spikes S2, S3, S4, F1 |
+| DLSS SR / DLSS-G + optical flow (4) | ✅ 0.5: `dlss-module/`, `src/dlss/`, `gpu/optical_flow.*` | below VSR / VFX on compressed video; cheap high multipliers |
+| DLSS 5 neural rendering (4+) | `dlss-module/` (feature 18) when NVIDIA ships `libnvidia-ngx-dlssnr.so` | spike S10: not on Linux yet |
 | VSR / frame gen off the render thread | ✅ 0.3: `pipeline/render_ahead.*` | frame gen HIGH smooth at 165 Hz (stride 2) |
 | Side-by-side comparison (2) | ✅ 0.3: pipeline keeps originals, presenter split blit | UI draws the line |
 | NVENC recording / export (5) | `output/nvenc_recorder.*`; `nitid-cli export` command | `nitid-cli`'s ffmpeg-pipe writer is a stopgap |
