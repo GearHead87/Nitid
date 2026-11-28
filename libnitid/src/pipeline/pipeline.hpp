@@ -7,6 +7,7 @@
 // produce(position) returns a GPU pointer to the RGBA8 frame for that moment: a real frame, or one
 // generated between `current` and `next`. Callers (window presenter, headless runner) copy it out.
 #include "core/running_average.hpp"
+#include "dlss/frame_gen.hpp"
 #include "dlss/super_res.hpp"
 #include "gpu/cuda_context.hpp"
 #include "gpu/spatial_scaler.hpp"
@@ -53,7 +54,8 @@ public:
     // Output box (window size, or the requested headless size) and settings. Cheap when nothing changed.
     void configure(Size box, const Settings& settings);
 
-    // Frame for `position` (in source frames). multiplier > 0 rounds to k/multiplier steps.
+    // Frame for `position` (in source frames). multiplier > 0 rounds to k/multiplier steps (DLSS frame generation
+    // needs one: 0 is treated as 2).
     // nullopt once the source has ended and position is past the last frame.
     std::optional<Output> produce(double position, int multiplier);
 
@@ -85,6 +87,8 @@ private:
     void upload(input::DecodedFrame& f, Slot& dst, bool cut);
     void allocate_ring();
     template <class F> void timed(RunningAverage& avg, F&& fn);
+    // DLSS-G: frame k of m between slots c and n (generating the pair's frames when needed).
+    CUdeviceptr dlss_generated(const Slot& c, const Slot& n, int m, int k);
 
     gpu::CudaContext& cuda_;
     std::shared_ptr<const vfx::Api> vfx_;
@@ -97,7 +101,9 @@ private:
     enum class Up { None, Vsr, Spatial, Dlss };
     Up up_ = Up::None;  // upscaler actually running
     bool sr_active_ = false, fg_active_ = false;  // sr_active_: any upscaler running
-    bool sr_failed_ = false, fg_failed_ = false, dlss_failed_ = false;
+    bool sr_failed_ = false, fg_failed_ = false, dlss_failed_ = false, dlss_fg_failed_ = false;
+    bool fg_dlss_ = false;   // frame generation is DLSS-G (else VFX)
+    bool fg_motion_ = false; // DLSS-G gets optical flow motion vectors (lite mode)
     bool dlss_reset_ = true;  // DLSS history: start over with the next frame (start, seek, new size)
     bool compare_ = false;
     double live_interval_ = 0, last_arrival_ = 0;
@@ -107,8 +113,10 @@ private:
     std::unique_ptr<vfx::SuperRes> sr_;
     std::unique_ptr<gpu::SpatialScaler> spatial_;
     std::unique_ptr<dlss::SuperRes> dlss_sr_;
+    std::unique_ptr<dlss::FrameGen> dlss_fg_;
     std::unique_ptr<gpu::OpticalFlow> flow_;  // motion for DLSS (source size)
     bool flow_active_ = false;
+    bool flow_reset_ = true;  // next frame starts a new motion sequence (start, seek, reconfigure)
     std::unique_ptr<vfx::FrameGen> fg_;
     gpu::CudaBuffer upload_;  // source-size frame (VSR input)
     Slot slots_[2];

@@ -6,8 +6,11 @@ namespace nitid_app {
 
 namespace {
 
-std::string multiplier_text(const nitid::Settings& s)
+std::string multiplier_text(const nitid::Settings& s, const nitid::Stats& st)
 {
+    if (st.frame_gen_multiplier > 0)  // the one in use (DLSS picks a whole step for "per refresh")
+        return s.frame_gen_multiplier > 0 ? std::format("{}x", st.frame_gen_multiplier)
+                                          : std::format("{}x (closest to the refresh rate)", st.frame_gen_multiplier);
     return s.frame_gen_multiplier > 0 ? std::format("{}x", s.frame_gen_multiplier) : "per refresh";
 }
 
@@ -25,7 +28,7 @@ std::string upscaler_text(const nitid::Settings& s, const nitid::Stats& st)
 std::string frame_gen_text(const nitid::Settings& s, const nitid::Stats& st)
 {
     if (st.frame_gen_active)
-        return std::format("FG {} {}{} {:.2f} ms", nitid::to_string(s.frame_gen_quality), multiplier_text(s),
+        return std::format("FG {} {}{} {:.2f} ms", nitid::frame_gen_name(s), multiplier_text(s, st),
                            st.frame_gen_stride > 1 ? std::format(" (every {} refreshes)", st.frame_gen_stride) : "",
                            st.avg.frame_gen_ms);
     return std::format("FG off ({})", st.frame_gen_note);

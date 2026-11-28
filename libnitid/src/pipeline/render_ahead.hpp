@@ -7,7 +7,8 @@
 //   - frame gen per refresh: one frame every `stride` refreshes. stride is 1 when the GPU keeps up and grows
 //     (2, 3, 4) when frame generation takes longer than a refresh (e.g. HIGH quality at 165 Hz), so motion stays
 //     evenly paced at refresh / stride instead of stuttering;
-//   - fixed multiplier m: every 1/m source frame; frame gen off: every source frame.
+//   - fixed multiplier m: every 1/m source frame; frame gen off: every source frame. DLSS frame generation always
+//     works in whole steps: with "every refresh" it uses the step closest to the refresh rate (2x .. its maximum).
 // The GPU work overlaps the render thread's waits for the display, and loading models (settings changes) no
 // longer freezes the window.
 //
@@ -75,6 +76,7 @@ public:
 private:
     void worker();
     double grid(const Stats& ps) const;  // positions between prepared frames (m_ held)
+    int multiplier(const Stats& ps) const;  // fixed multiplier in use, 0 = one frame per refresh (m_ held)
 
     gpu::CudaContext& cuda_;
     Pipeline& pipe_;

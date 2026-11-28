@@ -211,6 +211,10 @@ void test_settings()
           upscaling_name(s) == "DLSS");
     CHECK(parse_upscaling("dlss-k", s) && s.dlss_preset == DlssPreset::K && upscaling_name(s) == "DLSS preset K");
     CHECK(parse_upscaling("dlss-m", s) && s.dlss_preset == DlssPreset::M);
+    CHECK(parse_frame_gen("dlss", s) && s.frame_gen == FrameGen::DlssFrameGen &&
+          s.dlss_frame_gen_mode == DlssFrameGenMode::Full && frame_gen_name(s) == "DLSS");
+    CHECK(parse_frame_gen("dlss-lite", s) && s.dlss_frame_gen_mode == DlssFrameGenMode::Lite && frame_gen_name(s) == "DLSS lite");
+    CHECK(parse_frame_gen("high", s) && s.frame_gen == FrameGen::VfxFrameGen && frame_gen_name(s) == "VFX high");
     CHECK(!parse_upscaling("dlss-x", s) && !parse_upscaling("dlssk", s) && !parse_upscaling("dlss-", s));
     CHECK(parse_frame_gen("high", s) && s.frame_gen == FrameGen::VfxFrameGen && s.frame_gen_quality == FrameGenQuality::High);
     CHECK(!parse_frame_gen("x", s));

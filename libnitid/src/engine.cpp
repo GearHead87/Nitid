@@ -150,6 +150,7 @@ struct Engine::Impl {
         if (!s.frame_gen_active) return window ? 0 : 1;  // window: 0 = no rounding needed (no generation)
         int m = settings.frame_gen_multiplier;
         if (m <= 0) return window ? 0 : 2;
+        if (s.frame_gen_max_multiplier > 0) m = std::clamp(m, 2, s.frame_gen_max_multiplier);  // DLSS: whole steps
         return m;
     }
 

@@ -36,7 +36,14 @@ enum class Cleanup : std::uint8_t {
 // How extra frames are made between real video frames.
 enum class FrameGen : std::uint8_t {
     Off,
-    VfxFrameGen,  // NVIDIA VFX Video Frame Generation (RTX 40/50)
+    VfxFrameGen,  // NVIDIA VFX Video Frame Generation (RTX 40/50): frames at any moment (one per display refresh)
+    DlssFrameGen, // NVIDIA DLSS Frame Generation (RTX 40: 2x, RTX 50: up to 6x): 1..5 frames evenly between real ones
+};
+
+// DLSS Frame Generation model.
+enum class DlssFrameGenMode : std::uint8_t {
+    Full,  // the full model (finds motion itself)
+    Lite,  // "lite candidate blending" with Nitid's optical-flow motion vectors: much cheaper
 };
 
 // VFX Video Frame Generation modes (values match the SDK's Mode).
@@ -61,8 +68,10 @@ struct Settings {
 
     FrameGen frame_gen = FrameGen::VfxFrameGen;
     FrameGenQuality frame_gen_quality = FrameGenQuality::Medium;
+    DlssFrameGenMode dlss_frame_gen_mode = DlssFrameGenMode::Full;
     // Output frames per source frame. 0 = one new frame for every display refresh (window output only;
-    // headless output treats 0 as 2).
+    // headless output treats 0 as 2). DLSS frame generation makes whole steps (2x..6x): 0 picks the step closest to
+    // the display refresh (e.g. 24 fps at 165 Hz: 6x).
     int frame_gen_multiplier = 0;
 
     // Nitid's own scene-cut detector. On a cut, frame generation holds the old shot instead of morphing
@@ -86,6 +95,9 @@ NITID_EXPORT std::string_view to_string(Cleanup) noexcept;
 NITID_EXPORT std::string_view to_string(LiveMode) noexcept;
 NITID_EXPORT std::string_view to_string(FrameGenQuality) noexcept;
 NITID_EXPORT std::string_view to_string(DlssPreset) noexcept;
+NITID_EXPORT std::string_view to_string(DlssFrameGenMode) noexcept;
+// Short description of the chosen frame generation, e.g. "VFX medium", "DLSS", "DLSS lite", "off".
+NITID_EXPORT std::string frame_gen_name(const Settings& s);
 
 // Short description of the chosen upscaler, e.g. "VSR high", "FSR 1", "NIS", "DLSS", "DLSS preset K", "off".
 NITID_EXPORT std::string upscaling_name(const Settings& s);
@@ -93,7 +105,7 @@ NITID_EXPORT std::string upscaling_name(const Settings& s);
 // Parse the names apps use on the command line and in presets.
 //   upscaling:        "off", "fsr", "nis", "dlss" (or "dlss-j", "dlss-k", "dlss-l", "dlss-m" for a preset),
 //                     or VSR quality "bicubic", "low", "medium", "high", "ultra"
-//   frame generation: "off", "low", "medium", "high"
+//   frame generation: "off", "low", "medium", "high" (VFX), "dlss", "dlss-lite"
 // Sets both the on/off choice and the quality in `s`. Returns false if the name is unknown.
 NITID_EXPORT bool parse_upscaling(std::string_view name, Settings& s) noexcept;
 NITID_EXPORT bool parse_frame_gen(std::string_view name, Settings& s) noexcept;

@@ -5,6 +5,7 @@
 
 #include <nitid/nitid.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <memory>
@@ -103,7 +104,8 @@ int run(const BenchOptions& o)
     std::println("| Clean-up | {} |", st.cleanup_active ? std::format("{} {}", nitid::to_string(s.cleanup), nitid::to_string(s.cleanup_strength))
                                                         : s.cleanup == nitid::Cleanup::Off ? std::string("off") : "not running (" + st.cleanup_note + ")");
     std::println("| Frame generation | {} |",
-                 st.frame_gen_active ? std::format("{} x{}", nitid::to_string(s.frame_gen_quality), o.multiplier > 0 ? o.multiplier : 2)
+                 st.frame_gen_active ? std::format("{} x{}", nitid::frame_gen_name(s),
+                                                   st.frame_gen_max_multiplier > 0 ? std::clamp(o.multiplier, 2, st.frame_gen_max_multiplier) : o.multiplier)
                                      : std::format("off ({})", st.frame_gen_note));
     std::println("| Output frames | {} ({} generated, {} real) |", n, st.generated_frames, st.source_frames);
     std::println("| Scene cuts detected | {} |", st.scene_cuts);
@@ -131,8 +133,9 @@ Runner add_bench_command(CLI::App& app)
                     "Upscaling: VSR (AI) quality bicubic, low, medium, high, ultra; dlss (or dlss-j/k/l/m: DLSS preset); fsr; nis; off")
         ->check(CLI::IsMember({"off", "bicubic", "low", "medium", "high", "ultra", "dlss", "dlss-j", "dlss-k", "dlss-l", "dlss-m", "fsr", "nis"}))
         ->capture_default_str();
-    cmd->add_option("--frame-gen", o->frame_gen, "Frame generation: off, low, medium, high")
-        ->check(CLI::IsMember({"off", "low", "medium", "high"}))
+    cmd->add_option("--frame-gen", o->frame_gen,
+                    "Frame generation: VFX quality low, medium, high; dlss or dlss-lite (DLSS frame generation); off")
+        ->check(CLI::IsMember({"off", "low", "medium", "high", "dlss", "dlss-lite"}))
         ->capture_default_str();
     cmd->add_option("--cleanup", o->cleanup, "Same-size VFX clean-up when not upscaling: off, denoise[-low|-medium|-high|-ultra], deblur[-...]")
         ->check([](const std::string& v) { nitid::Settings t; return nitid::parse_cleanup(v, t) ? std::string() : "unknown clean-up " + v; })

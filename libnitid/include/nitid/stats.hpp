@@ -49,6 +49,9 @@ struct Stats {
     // Frame gen one-per-refresh mode: a new frame every `frame_gen_stride` refreshes (1 = every refresh; more when
     // frame generation takes longer than a refresh). 0 = not in that mode.
     int frame_gen_stride = 0;
+    // Generated frames sit at whole steps between real ones (DLSS frame gen): the multiplier in use (2..6), else 0.
+    int frame_gen_multiplier = 0;
+    int frame_gen_max_multiplier = 0;  // DLSS frame gen: the largest step this GPU allows (2 or 6); 0 = any moment
 
     double position_s = 0;                // playback position
     StageTimes avg;

@@ -31,6 +31,7 @@ std::string_view to_string(FrameGen f) noexcept
     switch (f) {
         case FrameGen::Off: return "off";
         case FrameGen::VfxFrameGen: return "VFX frame gen";
+        case FrameGen::DlssFrameGen: return "DLSS frame gen";
     }
     return "?";
 }
@@ -72,6 +73,25 @@ std::string_view to_string(DlssPreset p) noexcept
         case DlssPreset::K: return "K";
         case DlssPreset::L: return "L";
         case DlssPreset::M: return "M";
+    }
+    return "?";
+}
+
+std::string_view to_string(DlssFrameGenMode m) noexcept
+{
+    switch (m) {
+        case DlssFrameGenMode::Full: return "full";
+        case DlssFrameGenMode::Lite: return "lite";
+    }
+    return "?";
+}
+
+std::string frame_gen_name(const Settings& s)
+{
+    switch (s.frame_gen) {
+        case FrameGen::Off: return "off";
+        case FrameGen::VfxFrameGen: return "VFX " + std::string(to_string(s.frame_gen_quality));
+        case FrameGen::DlssFrameGen: return s.dlss_frame_gen_mode == DlssFrameGenMode::Lite ? "DLSS lite" : "DLSS";
     }
     return "?";
 }
@@ -133,6 +153,11 @@ bool parse_frame_gen(std::string_view name, Settings& s) noexcept
 {
     if (name == "off") {
         s.frame_gen = FrameGen::Off;
+        return true;
+    }
+    if (name == "dlss" || name == "dlss-lite") {
+        s.frame_gen = FrameGen::DlssFrameGen;
+        s.dlss_frame_gen_mode = name == "dlss" ? DlssFrameGenMode::Full : DlssFrameGenMode::Lite;
         return true;
     }
     for (auto q : {FrameGenQuality::Low, FrameGenQuality::Medium, FrameGenQuality::High})

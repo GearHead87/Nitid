@@ -5,6 +5,8 @@
 
 #include <nitid/error.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace nitid::pipeline {
@@ -23,6 +25,7 @@ Pipeline::~Pipeline()
 {
     cuda_.sync();
     dlss_sr_.reset();  // before the Vulkan device / DLSS runtime go
+    dlss_fg_.reset();
     flow_.reset();
 }
 
@@ -51,7 +54,8 @@ void Pipeline::restart()
     ended_ = false;
     pending_cut_ = false;
     dlss_reset_ = true;
-    if (flow_) flow_->reset();
+    flow_reset_ = true;
+    if (dlss_fg_) dlss_fg_->restart();
 }
 
 void Pipeline::allocate_ring()
@@ -147,15 +151,22 @@ void Pipeline::configure(Size box, const Settings& settings)
     } else if (sr_ && sr_->configured()) {
         sr_->reset();  // free the model's memory
     }
-    // Motion from optical flow (source size): for DLSS when it upscales. At the same size (DLAA) motion vectors made
-    // it worse (tests/v0.5/03: 40.45 -> 39.18 dB), so DLAA runs without.
-    const bool want_flow = up_ == Up::Dlss && !(work_ == src_);
+    // DLSS frame generation possible? (decided here: it may need optical flow)
+    const bool dlss_fg_ok = gx_.dlss && gx_.vk && gx_.dlss->caps().frame_gen;
+    const bool want_dlss_fg = settings.frame_gen == FrameGen::DlssFrameGen && dlss_fg_ok && !dlss_fg_failed_;
+    const bool lite = settings.dlss_frame_gen_mode == DlssFrameGenMode::Lite;
+    // Motion from optical flow (source size): for DLSS when it upscales (at the same size, DLAA, motion vectors made
+    // it worse: tests/v0.5/03), and for DLSS-G lite.
+    // (The full DLSS-G model gets zero motion: it finds motion itself, and optical flow vectors helped on one clip and
+    // hurt on another, tests/v0.5/04 and spike F1.)
+    fg_motion_ = want_dlss_fg && lite;
+    const bool want_flow = (up_ == Up::Dlss && !(work_ == src_)) || fg_motion_;
     flow_active_ = false;
     if (want_flow && gx_.vk && gx_.kernels && gpu::OpticalFlow::available(*gx_.vk, *gx_.kernels)) {
         try {
             if (!flow_) flow_ = std::make_unique<gpu::OpticalFlow>(*gx_.vk, cuda_, *gx_.kernels);
             flow_->configure(src_.w, src_.h);
-            flow_->reset();
+            flow_reset_ = true;
             flow_active_ = true;
         } catch (const Error& e) {
             log::error("optical flow: {} (DLSS gets no motion vectors)", e.what());
@@ -164,11 +175,12 @@ void Pipeline::configure(Size box, const Settings& settings)
     } else if (want_flow) {
         log::warn("no hardware optical flow: DLSS gets no motion vectors");
     }
+    if (!flow_active_) fg_motion_ = false;
     if (!want_flow && flow_) flow_.reset();
     if (up_ == Up::Dlss) {
         try {
             if (!dlss_sr_) dlss_sr_ = std::make_unique<dlss::SuperRes>(*gx_.vk, cuda_, *gx_.dlss);
-            dlss_sr_->set_motion(flow_active_ ? flow_.get() : nullptr);
+            dlss_sr_->set_motion(flow_active_ && !(work_ == src_) ? flow_.get() : nullptr);
             // Auto: preset M when upscaling (best on video at 1.5x and 2x with motion), K for DLAA (tests/v0.5/03).
             const DlssPreset preset = settings.dlss_preset != DlssPreset::Auto ? settings.dlss_preset
                                       : work_ == src_                         ? DlssPreset::K
@@ -191,8 +203,26 @@ void Pipeline::configure(Size box, const Settings& settings)
 
     // Frame generation.
     fg_active_ = false;
+    fg_dlss_ = false;
     fg_note_.clear();
-    if (settings.frame_gen != FrameGen::VfxFrameGen) fg_note_ = "off";
+    if (settings.frame_gen == FrameGen::DlssFrameGen) {
+        if (!dlss_fg_ok)
+            fg_note_ = !gx_.dlss ? (gx_.dlss_note.empty() ? "DLSS not available" : gx_.dlss_note)
+                                 : "DLSS frame generation needs an RTX 40 / 50 GPU";
+        else if (dlss_fg_failed_) fg_note_ = "DLSS frame generation failed to start (see log)";
+        else {
+            try {
+                if (!dlss_fg_) dlss_fg_ = std::make_unique<dlss::FrameGen>(*gx_.vk, cuda_, *gx_.dlss);
+                dlss_fg_->configure(work_.w, work_.h, src_.w, src_.h, lite);
+                dlss_fg_->restart();
+                fg_active_ = fg_dlss_ = true;
+            } catch (const Error& e) {
+                log::error("{}", e.what());
+                dlss_fg_failed_ = true;
+                fg_note_ = "DLSS frame generation failed to start (see log)";
+            }
+        }
+    } else if (settings.frame_gen != FrameGen::VfxFrameGen) fg_note_ = "off";
     else if (!can_fg_) fg_note_ = "not available on this GPU / runtime";
     else if (fg_failed_) fg_note_ = "failed to load (see log)";
     else {
@@ -205,7 +235,8 @@ void Pipeline::configure(Size box, const Settings& settings)
             fg_note_ = "failed to load (see log)";
         }
     }
-    if (!fg_active_ && fg_ && fg_->configured()) fg_->reset();
+    if ((!fg_active_ || fg_dlss_) && fg_ && fg_->configured()) fg_->reset();
+    if (!fg_dlss_ && dlss_fg_ && dlss_fg_->configured()) dlss_fg_->reset();
     log::info("Pipeline: source {}x{} -> work {}x{} (upscaler {}, frame gen {})", src_.w, src_.h, work_.w, work_.h,
               sr_active_ ? upscaling_name(settings) : cleanup_active_ ? std::string(to_string(settings.cleanup)) : sr_note_,
               fg_active_ ? "on" : fg_note_);
@@ -223,18 +254,23 @@ void Pipeline::upload(input::DecodedFrame& f, Slot& dst, bool cut)
         copy_in(dst.orig.ptr());
         dst.has_orig = true;
     }
+    // Optical flow (DLSS motion vectors) on the source frame at `src`, current -> previous uploaded frame.
+    auto motion = [&](CUdeviceptr src) {
+        if (!flow_active_) return;
+        if (cut || flow_reset_) flow_->reset();  // no motion across a cut or a seek
+        flow_reset_ = false;
+        timed(motion_ms_, [&] { flow_->push(src); });
+    };
     if (up_ == Up::Vsr) {
         timed(upload_ms_, [&] { copy_in(upload_.ptr()); });
+        motion(upload_.ptr());
         timed(upscale_ms_, [&] {
             sr_->run();
             NITID_CU(cuMemcpyDtoDAsync(dst.buf.ptr(), sr_->output(), size_t(work_.w) * work_.h * 4, cuda_.stream));
         });
     } else if (up_ == Up::Dlss) {
         timed(upload_ms_, [&] { copy_in(dlss_sr_->input()); });
-        if (flow_active_) {
-            if (cut || dlss_reset_) flow_->reset();  // no motion across a cut or a seek
-            timed(motion_ms_, [&] { flow_->push(dlss_sr_->input()); });
-        }
+        motion(dlss_sr_->input());
         timed(upscale_ms_, [&] {
             dlss_sr_->run(dlss_reset_ || cut);  // a new shot: don't carry detail over from the old one
             NITID_CU(cuMemcpyDtoDAsync(dst.buf.ptr(), dlss_sr_->output(), size_t(work_.w) * work_.h * 4, cuda_.stream));
@@ -247,9 +283,11 @@ void Pipeline::upload(input::DecodedFrame& f, Slot& dst, bool cut)
             timed(upload_ms_, [&] { copy_in(upload_.ptr()); });
             in = upload_.ptr();
         }
+        motion(in);
         timed(upscale_ms_, [&] { spatial_->run(in, dst.buf.ptr(), cuda_.stream); });
     } else {
         timed(upload_ms_, [&] { copy_in(dst.buf.ptr()); });
+        motion(dst.buf.ptr());
     }
 }
 
@@ -278,9 +316,21 @@ bool Pipeline::fetch_next(int64_t min_index)
     }
 }
 
+CUdeviceptr Pipeline::dlss_generated(const Slot& c, const Slot& n, int m, int k)
+{
+    timed(frame_gen_ms_, [&] {
+        dlss_fg_->generate(c.buf.ptr(), c.index, n.buf.ptr(), n.index, m - 1, fg_motion_ ? flow_.get() : nullptr);
+    });
+    return dlss_fg_->output(k);
+}
+
 std::optional<Output> Pipeline::produce(double position, int multiplier)
 {
     if (!source_ || !work_.w) return std::nullopt;
+    if (fg_dlss_) {  // DLSS-G: whole steps between real frames, 2x .. its maximum
+        const int max_m = gx_.dlss->caps().max_generated + 1;
+        multiplier = std::clamp(multiplier > 0 ? multiplier : 2, 2, max_m);
+    }
     const FramePick p = pick(position, multiplier);
     const int64_t i = p.frame;
 
@@ -311,6 +361,12 @@ std::optional<Output> Pipeline::produce(double position, int multiplier)
     if (ended_ && !n.valid() && i > c.index) return std::nullopt;  // past the last frame
 
     const bool gen = fg_active_ && p.phase > 0 && n.valid() && n.index == c.index + 1 && !n.scene_cut;
+    if (gen && fg_dlss_) {
+        const int k = std::clamp(int(std::lround(p.phase * multiplier)), 1, multiplier - 1);
+        const CUdeviceptr out = dlss_generated(c, n, multiplier, k);
+        ++generated_;
+        return with_orig(Output{out, work_, true}, p.phase < 0.5f ? c : n);
+    }
     if (gen) {
         timed(frame_gen_ms_, [&] { fg_->run(c.buf.ptr(), n.buf.ptr(), p.phase, false); });
         ++generated_;
@@ -374,6 +430,16 @@ std::optional<Output> Pipeline::produce_live(bool interpolate, double target)
     if (target >= n.arrival || span <= 0 || span > 0.25) return newest;
     if (target <= c.arrival) return with(Output{c.buf.ptr(), work_, false}, c);
     const float phase = float((target - c.arrival) / span);
+    if (fg_dlss_) {
+        // DLSS-G makes whole steps: use its largest multiplier and the nearest step.
+        const int m = gx_.dlss->caps().max_generated + 1;
+        const int k = int(std::lround(phase * m));
+        if (k <= 0) return with(Output{c.buf.ptr(), work_, false}, c);
+        if (k >= m) return newest;
+        const CUdeviceptr out = dlss_generated(c, n, m, k);
+        ++generated_;
+        return with(Output{out, work_, true}, phase < 0.5f ? c : n);
+    }
     if (fg_active_) {
         timed(frame_gen_ms_, [&] { fg_->run(c.buf.ptr(), n.buf.ptr(), phase, false); });
         ++generated_;
@@ -393,6 +459,7 @@ void Pipeline::fill_stats(Stats& s) const
     s.cleanup_active = cleanup_active_;
     s.cleanup_note = cleanup_note_;
     s.frame_gen_note = fg_note_;
+    s.frame_gen_max_multiplier = fg_dlss_ ? gx_.dlss->caps().max_generated + 1 : 0;
     s.source_frames = source_frames_;
     s.skipped_frames = skipped_;
     s.generated_frames = generated_;

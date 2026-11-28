@@ -76,6 +76,7 @@ private:
     bool shaped_ = false;        // window already fitted to a video
     std::string error_;          // shown on screen until the next file opens
     nitid::Settings settings_;
+    nitid::FrameGen last_frame_gen_ = nitid::FrameGen::VfxFrameGen;  // G turns this back on
     uint32_t dialog_event_ = 0;  // SDL user event carrying a file chosen in the dialog
     bool running_ = true;
     bool fullscreen_ = false;

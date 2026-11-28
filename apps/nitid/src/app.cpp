@@ -370,15 +370,25 @@ void App::handle(Action a)
             break;
         }
         case Action::ToggleFrameGen:
-            settings_.frame_gen = settings_.frame_gen == FrameGen::Off ? FrameGen::VfxFrameGen : FrameGen::Off;
+            if (settings_.frame_gen != FrameGen::Off) last_frame_gen_ = settings_.frame_gen;
+            settings_.frame_gen = settings_.frame_gen == FrameGen::Off ? last_frame_gen_ : FrameGen::Off;
             break;
         case Action::CycleFrameGenQuality:
-            settings_.frame_gen_quality = FrameGenQuality((int(settings_.frame_gen_quality) + 1) % 3);
+            if (settings_.frame_gen == FrameGen::DlssFrameGen)
+                settings_.dlss_frame_gen_mode = settings_.dlss_frame_gen_mode == DlssFrameGenMode::Full ? DlssFrameGenMode::Lite
+                                                                                                        : DlssFrameGenMode::Full;
+            else
+                settings_.frame_gen_quality = FrameGenQuality((int(settings_.frame_gen_quality) + 1) % 3);
+            break;
+        case Action::SwitchFrameGenKind:
+            if (settings_.frame_gen == FrameGen::DlssFrameGen) settings_.frame_gen = FrameGen::VfxFrameGen;
+            else if (engine_->capabilities().dlss_frame_gen) settings_.frame_gen = FrameGen::DlssFrameGen;
             break;
         case Action::MultiplierMatchDisplay: settings_.frame_gen_multiplier = 0; break;
         case Action::Multiplier2: settings_.frame_gen_multiplier = 2; break;
         case Action::Multiplier3: settings_.frame_gen_multiplier = 3; break;
         case Action::Multiplier4: settings_.frame_gen_multiplier = 4; break;
+        case Action::Multiplier6: settings_.frame_gen_multiplier = 6; break;
         case Action::ToggleSceneCuts: settings_.scene_cut_detection = !settings_.scene_cut_detection; break;
         case Action::ToggleCompare: settings_.compare = !settings_.compare; break;
         case Action::ToggleLiveMode:

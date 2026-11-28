@@ -26,8 +26,9 @@ int main(int argc, char** argv)
                    "Upscaling: VSR (AI) quality low, medium, high, ultra; dlss (or dlss-j/k/l/m for a DLSS preset); fsr; nis; off")
         ->check(CLI::IsMember({"off", "low", "medium", "high", "ultra", "dlss", "dlss-j", "dlss-k", "dlss-l", "dlss-m", "fsr", "nis"}))
         ->capture_default_str();
-    cli.add_option("--frame-gen", frame_gen, "Frame generation: off, low, medium, high")
-        ->check(CLI::IsMember({"off", "low", "medium", "high"}))
+    cli.add_option("--frame-gen", frame_gen,
+                   "Frame generation: VFX quality low, medium, high; dlss or dlss-lite (DLSS frame generation); off")
+        ->check(CLI::IsMember({"off", "low", "medium", "high", "dlss", "dlss-lite"}))
         ->capture_default_str();
     std::string cleanup = "off";
     cli.add_option("--cleanup", cleanup, "Same-size VFX clean-up when not upscaling: off, denoise[-low..-ultra], deblur[-...]")
@@ -36,7 +37,7 @@ int main(int argc, char** argv)
     cli.add_option("--sharpness", o.settings.sharpness, "FSR / NIS sharpening, 0 to 1")
         ->check(CLI::Range(0.0f, 1.0f))
         ->capture_default_str();
-    cli.add_option("--multiplier", multiplier, "Frame gen multiplier: 2, 3, 4, or 0 = one frame per display refresh")
+    cli.add_option("--multiplier", multiplier, "Frame gen multiplier: 2..6, or 0 = one frame per display refresh (DLSS: the step closest to it)")
         ->check(CLI::Range(0, 8))
         ->capture_default_str();
     cli.add_flag("--compare", o.settings.compare, "Side by side: original (left) | Nitid (right); X toggles");

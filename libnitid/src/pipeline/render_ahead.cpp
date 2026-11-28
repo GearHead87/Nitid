@@ -65,10 +65,22 @@ void RenderAhead::stop()
     queue_.clear();
 }
 
+int RenderAhead::multiplier(const Stats& ps) const
+{
+    if (!ps.frame_gen_active) return 0;
+    const int maxm = ps.frame_gen_max_multiplier;  // > 0: whole steps only (DLSS frame generation)
+    if (settings_.frame_gen_multiplier > 0)
+        return maxm > 0 ? std::clamp(settings_.frame_gen_multiplier, 2, maxm) : settings_.frame_gen_multiplier;
+    // Whole steps closest to the refresh rate without going over it (more distinct frames than refreshes would be
+    // made and never shown): 24 fps at 165 Hz -> 6x (144 fps), 60 fps -> 2x.
+    if (maxm > 0) return std::clamp(int(std::floor(1.0 / std::max(refresh_step_, 1e-3) + 0.05)), 2, maxm);
+    return 0;
+}
+
 double RenderAhead::grid(const Stats& ps) const
 {
     if (!ps.frame_gen_active) return 1.0;
-    if (settings_.frame_gen_multiplier > 0) return 1.0 / settings_.frame_gen_multiplier;
+    if (const int m = multiplier(ps); m > 0) return 1.0 / m;
     return refresh_step_ * stride_;
 }
 
@@ -127,7 +139,11 @@ void RenderAhead::worker()
         }
 
         const auto t0 = SteadyClock::now();
-        const int mult = s.frame_gen_multiplier > 0 ? s.frame_gen_multiplier : 0;
+        int mult;
+        {
+            std::lock_guard l(m_);
+            mult = multiplier(pipe_stats_);
+        }
         std::optional<Output> out;
         try {
             out = pipe_.produce(pos, mult);
@@ -168,7 +184,7 @@ void RenderAhead::worker()
         // while below the threshold (tests/v0.3/01: 90 % flapped between 2 and 3 at HIGH).
         if (warmup_ > 0) {
             --warmup_;
-        } else if (ps.frame_gen_active && s.frame_gen_multiplier == 0 && period_s_ > 0) {
+        } else if (ps.frame_gen_active && mult == 0 && period_s_ > 0) {
             frame_ms_ = frame_ms_ > 0 ? frame_ms_ + (ms - frame_ms_) * 0.1 : ms;
             const int want = frame_gen_stride(frame_ms_, period_s_, kMaxStride);
             if (want > stride_) {
@@ -249,7 +265,9 @@ void RenderAhead::fill_stats(Stats& s) const
     s.avg.upscale_ms = p.avg.upscale_ms, s.avg.frame_gen_ms = p.avg.frame_gen_ms;
     s.avg.motion_ms = p.avg.motion_ms;
     s.late_frames = late_;
-    s.frame_gen_stride = (p.frame_gen_active && settings_.frame_gen_multiplier == 0) ? stride_ : 0;
+    s.frame_gen_multiplier = multiplier(p);
+    s.frame_gen_max_multiplier = p.frame_gen_max_multiplier;
+    s.frame_gen_stride = (p.frame_gen_active && s.frame_gen_multiplier == 0) ? stride_ : 0;
 }
 
 void RenderAhead::reset_stats()

@@ -252,23 +252,37 @@ void PlayerUi::settings_panel(nitid::Engine& e, nitid::Settings& s, const nitid:
     }
 
     ImGui::SeparatorText("Frame generation");
-    bool fg = s.frame_gen == FrameGen::VfxFrameGen;
-    if (!caps.frame_gen) ImGui::BeginDisabled();
-    if (ImGui::Checkbox("NVIDIA VFX frame generation", &fg)) s.frame_gen = fg ? FrameGen::VfxFrameGen : FrameGen::Off;
-    if (!caps.frame_gen) ImGui::EndDisabled();
-    if (fg) {
+    static const std::pair<FrameGen, const char*> kinds[] = {
+        {FrameGen::VfxFrameGen, "VFX (NVIDIA video AI)"}, {FrameGen::DlssFrameGen, "DLSS (NVIDIA)"}, {FrameGen::Off, "Off"}};
+    const bool kinds_ok[] = {caps.frame_gen, caps.dlss_frame_gen, true};
+    choice("Frame gen", s.frame_gen, kinds, kinds_ok);
+    if (!caps.dlss_frame_gen && ImGui::IsItemHovered())
+        ImGui::SetTooltip("DLSS frame generation: %s",
+                          !caps.dlss_error.empty() ? caps.dlss_error.c_str() : "needs an RTX 40 / 50 GPU");
+    if (s.frame_gen == FrameGen::VfxFrameGen) {
         static const std::pair<FrameGenQuality, const char*> q[] = {
             {FrameGenQuality::Low, "Low"}, {FrameGenQuality::Medium, "Medium"}, {FrameGenQuality::High, "High"}};
         choice("Quality##fg", s.frame_gen_quality, q);
-        std::string per_refresh = std::format("Every refresh ({:.0f} Hz)", st.display_hz);
-        const std::pair<int, const char*> m[] = {{0, per_refresh.c_str()}, {2, "2x"}, {3, "3x"}, {4, "4x"}};
-        choice("Frames", s.frame_gen_multiplier, m);
+    } else if (s.frame_gen == FrameGen::DlssFrameGen) {
+        static const std::pair<DlssFrameGenMode, const char*> q[] = {{DlssFrameGenMode::Full, "Full"},
+                                                                     {DlssFrameGenMode::Lite, "Lite (cheaper, uses optical flow)"}};
+        choice("Model##dlssg", s.dlss_frame_gen_mode, q);
+    }
+    if (s.frame_gen != FrameGen::Off) {
+        std::string per_refresh = s.frame_gen == FrameGen::DlssFrameGen
+                                      ? std::format("Closest to {:.0f} Hz", st.display_hz)
+                                      : std::format("Every refresh ({:.0f} Hz)", st.display_hz);
+        const std::pair<int, const char*> m[] = {{0, per_refresh.c_str()}, {2, "2x"}, {3, "3x"}, {4, "4x"}, {5, "5x"}, {6, "6x"}};
+        const int maxm = s.frame_gen == FrameGen::DlssFrameGen ? std::max(2, caps.dlss_max_multiplier) : 6;
+        const bool m_ok[] = {true, true, maxm >= 3, maxm >= 4, maxm >= 5, maxm >= 6};
+        choice("Frames", s.frame_gen_multiplier, m, m_ok);
         ImGui::Checkbox("Scene-cut detection", &s.scene_cut_detection);
     }
     if (st.frame_gen_active)
-        dim_text(std::format("{:.2f} ms per generated frame, {:.0f} fps on screen", st.avg.frame_gen_ms, st.output_fps));
-    else
-        dim_text(std::format("Not running: {}", caps.frame_gen ? st.frame_gen_note : "needs an RTX 40 / 50 GPU and the VFX runtime"));
+        dim_text(std::format("{:.2f} ms per generated frame{}, {:.0f} fps on screen", st.avg.frame_gen_ms,
+                             st.frame_gen_multiplier > 0 ? std::format(" ({}x)", st.frame_gen_multiplier) : "", st.output_fps));
+    else if (s.frame_gen != FrameGen::Off)
+        dim_text(std::format("Not running: {}", st.frame_gen_note));
 
     ImGui::SeparatorText("View");
     ImGui::Checkbox("Compare: original | Nitid", &s.compare);
